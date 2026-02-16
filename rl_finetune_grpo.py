@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+"""
+GRPO (Group Relative Policy Optimization) fine-tuning for query optimization.
+
+Uses the query executor to run each generated hint string against PostgreSQL
+and computes a reward from three signals: inverse latency, inverse CPU time,
+and inverse peak memory. The model learns to generate pg_hint_plan hints that
+improve execution metrics.
+"""
+
+import os
+import re
+import sys
+import argparse
+from pathlib import Path
+
+# Ensure repo root is on path for query_execution
+REPO_ROOT = Path(__file__).resolve().parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+# Load env before importing query_execution (for POSTGRES_*)
+from dotenv import load_dotenv
+load_dotenv(REPO_ROOT / ".env")
+
+import pandas as pd
+from datasets import Dataset
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from trl import GRPOTrainer, GRPOConfig
+
+# Import after path and env are set
+from query_execution.single_query.run_query_with_metrics import run_query_with_metrics
+
+
+# ---------- Reward: three signals ----------
+
+def _parse_hints_from_completion(completion: str) -> str:
+    """Extract pg_hint_plan hint string from model completion (e.g. /*+ ... */)."""
+    if not completion or not isinstance(completion, str):
+        return ""
+    completion = completion.strip()
+    # Match /*+ ... */ (non-greedy)
+    m = re.search(r"/\*\+\s*.*?\s*\*/", completion, re.DOTALL)
+    if m:
+        return m.group(0).strip()
+    # If the whole completion looks like a hint, use it
+    if completion.startswith("/*+") and "*/" in completion:
+        return completion.split("*/")[0] + "*/"
+    return ""
+
+
+def _three_signal_reward(
+    latency_ms: float,
+    cpu_time_s: float,
+    max_rss_kb: float,
+    *,
+    weight_latency: float = 1.0,
+    weight_cpu: float = 1.0,
+    weight_memory: float = 1.0,
+    scale_latency_ms: float = 100.0,
+    scale_cpu_s: float = 0.5,
+    scale_memory_kb: float = 50_000.0,
+) -> float:
+    """
+    Combine three signals into a single reward (higher is better).
+
+    - Inverse latency: 1 / (1 + latency_ms / scale_latency_ms)
+    - Inverse CPU time: 1 / (1 + cpu_time_s / scale_cpu_s)
+    - Inverse memory: 1 / (1 + max_rss_kb / scale_memory_kb)
+
+    Weights are normalized so that (weight_latency + weight_cpu + weight_memory)
+    can be used to scale the total; default 1/3 each gives a combined reward in [0, 1].
+    """
+    total_w = weight_latency + weight_cpu + weight_memory
+    if total_w <= 0:
+        total_w = 1.0
+    r_lat = 1.0 / (1.0 + (latency_ms or 0) / scale_latency_ms)
+    r_cpu = 1.0 / (1.0 + (cpu_time_s or 0) / scale_cpu_s)
+    r_mem = 1.0 / (1.0 + (max_rss_kb or 0) / scale_memory_kb)
+    return (weight_latency * r_lat + weight_cpu * r_cpu + weight_memory * r_mem) / total_w
+
+
+def make_reward_fn(
+    db_config: dict,
+    weight_latency: float = 1.0,
+    weight_cpu: float = 1.0,
+    weight_memory: float = 1.0,
+    scale_latency_ms: float = 100.0,
+    scale_cpu_s: float = 0.5,
+    scale_memory_kb: float = 50_000.0,
+    reward_on_error: float = 0.0,
+):
+    """Build a GRPO reward function that returns a list of rewards (one per completion)."""
+
+    def reward_func(prompts, completions, sql_text, **kwargs):
+        # GRPO passes one sql_text per prompt; we have len(prompts) prompts and len(completions) completions (num_generations per prompt).
+        n_prompts = len(prompts)
+        n_completions = len(completions)
+        if n_prompts == 0 or n_completions == 0:
+            return [reward_on_error] * max(1, n_completions)
+        num_generations = n_completions // n_prompts
+
+        rewards = []
+        for i, completion in enumerate(completions):
+            prompt_idx = i // num_generations
+            sql = sql_text[prompt_idx] if isinstance(sql_text, (list, tuple)) else sql_text
+            if pd.isna(sql) or not str(sql).strip():
+                rewards.append(reward_on_error)
+                continue
+            sql = str(sql).strip()
+            hints = _parse_hints_from_completion(completion)
+
+            result = run_query_with_metrics(sql, hints=hints or None, db_config=db_config, timeout_s=30.0)
+            if not result.get("success"):
+                rewards.append(reward_on_error)
+                continue
+
+            r = _three_signal_reward(
+                result.get("latency_ms") or 0,
+                result.get("cpu_time_s") or 0,
+                result.get("max_rss_kb") or 0,
+                weight_latency=weight_latency,
+                weight_cpu=weight_cpu,
+                weight_memory=weight_memory,
+                scale_latency_ms=scale_latency_ms,
+                scale_cpu_s=scale_cpu_s,
+                scale_memory_kb=scale_memory_kb,
+            )
+            rewards.append(r)
+
+        return rewards
+
+    return reward_func
+
+
+# ---------- Dataset ----------
+
+def load_and_prepare_dataset(
+    dataset_path: str,
+    subset_size: int | None = None,
+    prompt_template: str = "Given the following SQL query, generate optimal pg_hint_plan hints to minimize execution time, CPU usage, and memory. Output only the hint comment, e.g. /*+ HashJoin(a b) SeqScan(t) */\n\nSQL:\n{sql}\n\nHints:",
+) -> Dataset:
+    """Load CSV with sql_text and build dataset with 'prompt' and 'sql_text' for GRPO."""
+    path = Path(dataset_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Dataset not found: {path}")
+    df = pd.read_csv(path)
+    if "sql_text" not in df.columns:
+        raise ValueError("Dataset must have a 'sql_text' column")
+    df = df[df["sql_text"].notna()].copy()
+    df["sql_text"] = df["sql_text"].astype(str).str.strip()
+    df = df[df["sql_text"].str.len() > 0]
+    if subset_size is not None:
+        df = df.head(subset_size)
+    df["prompt"] = df["sql_text"].apply(lambda s: prompt_template.format(sql=s))
+    return Dataset.from_pandas(df[["prompt", "sql_text"]], preserve_index=False)
+
+
+# ---------- Config ----------
+
+class GRPOFineTuneConfig:
+    DATASET_PATH = "cardinal_dataset/stackoverflow_n3000.csv"
+    SUBSET_SIZE = None  # e.g. 500 for quick runs
+    MODEL_NAME = "microsoft/Phi-3-mini-4k-instruct"
+    SFT_CHECKPOINT = None  # Set to sft_output/ or similar to start from SFT
+
+    OUTPUT_DIR = "./rl_grpo_output"
+    NUM_EPOCHS = 1
+    PER_DEVICE_BATCH_SIZE = 2
+    NUM_GENERATIONS = 4
+    MAX_PROMPT_LENGTH = 2048
+    MAX_COMPLETION_LENGTH = 256
+    LEARNING_RATE = 1e-5
+    GRADIENT_ACCUMULATION_STEPS = 4
+
+    # Reward weights (three signals)
+    WEIGHT_LATENCY = 1.0
+    WEIGHT_CPU = 1.0
+    WEIGHT_MEMORY = 1.0
+    SCALE_LATENCY_MS = 100.0
+    SCALE_CPU_S = 0.5
+    SCALE_MEMORY_KB = 50_000.0
+    REWARD_ON_ERROR = 0.0
+
+
+# ---------- Main ----------
+
+def main():
+    parser = argparse.ArgumentParser(description="GRPO fine-tuning with query-execution reward (latency, CPU, memory)")
+    parser.add_argument("--model", type=str, help="Base model name or path")
+    parser.add_argument("--sft_checkpoint", type=str, help="Path to SFT checkpoint to continue from")
+    parser.add_argument("--dataset_path", type=str, help="CSV with sql_text column")
+    parser.add_argument("--output_dir", type=str, help="Output directory")
+    parser.add_argument("--subset_size", type=int, help="Use only first N rows")
+    parser.add_argument("--batch_size", type=int, help="Per-device batch size")
+    parser.add_argument("--num_generations", type=int, help="Completions per prompt (group size)")
+    parser.add_argument("--lr", type=float, help="Learning rate")
+    parser.add_argument("--weight_latency", type=float, help="Reward weight for inverse latency")
+    parser.add_argument("--weight_cpu", type=float, help="Reward weight for inverse CPU time")
+    parser.add_argument("--weight_memory", type=float, help="Reward weight for inverse memory")
+    args = parser.parse_args()
+
+    config = GRPOFineTuneConfig()
+    if args.model:
+        config.MODEL_NAME = args.model
+    if args.sft_checkpoint:
+        config.SFT_CHECKPOINT = args.sft_checkpoint
+    if args.dataset_path:
+        config.DATASET_PATH = args.dataset_path
+    if args.output_dir:
+        config.OUTPUT_DIR = args.output_dir
+    if args.subset_size is not None:
+        config.SUBSET_SIZE = args.subset_size
+    if args.batch_size is not None:
+        config.PER_DEVICE_BATCH_SIZE = args.batch_size
+    if args.num_generations is not None:
+        config.NUM_GENERATIONS = args.num_generations
+    if args.lr is not None:
+        config.LEARNING_RATE = args.lr
+    if args.weight_latency is not None:
+        config.WEIGHT_LATENCY = args.weight_latency
+    if args.weight_cpu is not None:
+        config.WEIGHT_CPU = args.weight_cpu
+    if args.weight_memory is not None:
+        config.WEIGHT_MEMORY = args.weight_memory
+
+    model_name = config.SFT_CHECKPOINT or config.MODEL_NAME
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        trust_remote_code=True,
+        device_map="auto",
+    )
+
+    dataset = load_and_prepare_dataset(config.DATASET_PATH, subset_size=config.SUBSET_SIZE)
+
+    db_config = {
+        "host": os.getenv("POSTGRES_HOST", "localhost"),
+        "database": os.getenv("POSTGRES_DB", "cardinal_test"),
+        "user": os.getenv("POSTGRES_USER", "postgres"),
+        "password": os.getenv("POSTGRES_PASSWORD", "your_password"),
+        "port": int(os.getenv("POSTGRES_PORT", "5432")),
+    }
+    reward_fn = make_reward_fn(
+        db_config,
+        weight_latency=config.WEIGHT_LATENCY,
+        weight_cpu=config.WEIGHT_CPU,
+        weight_memory=config.WEIGHT_MEMORY,
+        scale_latency_ms=config.SCALE_LATENCY_MS,
+        scale_cpu_s=config.SCALE_CPU_S,
+        scale_memory_kb=config.SCALE_MEMORY_KB,
+        reward_on_error=config.REWARD_ON_ERROR,
+    )
+
+    training_args = GRPOConfig(
+        output_dir=config.OUTPUT_DIR,
+        num_train_epochs=config.NUM_EPOCHS,
+        per_device_train_batch_size=config.PER_DEVICE_BATCH_SIZE,
+        gradient_accumulation_steps=config.GRADIENT_ACCUMULATION_STEPS,
+        learning_rate=config.LEARNING_RATE,
+        num_generations=config.NUM_GENERATIONS,
+        max_completion_length=config.MAX_COMPLETION_LENGTH,
+        remove_unused_columns=False,
+        logging_steps=10,
+        save_steps=200,
+        save_total_limit=2,
+        bf16=True,
+    )
+
+    trainer = GRPOTrainer(
+        model=model,
+        args=training_args,
+        tokenizer=tokenizer,
+        reward_funcs=reward_fn,
+        train_dataset=dataset,
+    )
+    trainer.train()
+    trainer.save_model(config.OUTPUT_DIR)
+    tokenizer.save_pretrained(config.OUTPUT_DIR)
+
+
+if __name__ == "__main__":
+    main()

@@ -4,3 +4,22 @@ rich
 simplejson
 numpy
 jupyter
+pandas
+tqdm
+psycopg2-binary
+pyarrow
+python-dotenv
+
+# SFT Fine-tuning dependencies
+torch>=2.0.0
+transformers>=4.35.0
+datasets>=2.14.0
+peft>=0.6.0
+accelerate>=0.24.0
+bitsandbytes>=0.41.0
+tensorboard
+trl>=0.15.0
+
+# Flash Attention (optional, requires CUDA and specific PyTorch version)
+# Install separately: pip install flash-attn --no-build-isolation
+# Note: flash-attn requires CUDA-enabled PyTorch and may need specific versions
