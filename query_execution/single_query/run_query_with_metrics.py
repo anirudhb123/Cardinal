@@ -91,6 +91,10 @@ def run_query_with_metrics(
             "port": int(os.getenv("POSTGRES_PORT", 5432)),
         }
 
+    # Avoid subprocess if env set (e.g. to work around selectors/circular-import in some envs)
+    if os.environ.get("SQLSTORM_QUERY_IN_PROCESS", "").strip().lower() in ("1", "true", "yes"):
+        return _worker_run_query(query, hints, db_config)
+
     try:
         from multiprocessing import Process, Queue
     except ImportError:
