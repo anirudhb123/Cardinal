@@ -13,7 +13,23 @@ import resource
 import sys
 import time
 import tracemalloc
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
+
+# Hugging Face: project-local cache and disable Xet to avoid 416 / permission errors
+_project_root = Path(__file__).resolve().parent
+_hf_base = _project_root / ".cache" / "huggingface"
+_hf_base.mkdir(parents=True, exist_ok=True)
+if "HUGGINGFACE_HUB_CACHE" not in os.environ:
+    _hf_cache = _hf_base / "hub"
+    _hf_cache.mkdir(parents=True, exist_ok=True)
+    os.environ["HUGGINGFACE_HUB_CACHE"] = str(_hf_cache)
+if "HF_HOME" not in os.environ:
+    os.environ["HF_HOME"] = str(_hf_base)
+# Disable Xet backend (avoids HTTP 416 Range Not Satisfiable and ~/.cache permission errors)
+os.environ["HF_HUB_DISABLE_XET"] = "1"
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Tuple
 
 import pandas as pd
@@ -34,18 +50,30 @@ def load_llm_model(model_name):
 
     token = os.environ.get("HF_TOKEN")
     if token:
-        login(token=token)
+        try:
+            login(token=token)
+        except Exception:
+            # Invalid or expired token; continue without login (public models work without auth)
+            pass
     print(f"Loading model {model_name}...")
     print("  Step 1/3: Downloading/loading tokenizer (may take a moment on first run)...")
     sys.stdout.flush()
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     print("  Step 2/3: Downloading/loading model weights (may be several GB on first run)...")
     sys.stdout.flush()
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        dtype=torch.bfloat16,
-        device_map="auto",
-    )
+    # Prefer bfloat16; GPT-2 and other small/older models often use float16 or float32
+    for dtype in (torch.bfloat16, torch.float16, torch.float32):
+        try:
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                torch_dtype=dtype,
+                device_map="auto",
+            )
+            break
+        except (TypeError, ValueError):
+            continue
+    else:
+        model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
     print("  Step 3/3: Model loaded successfully.")
     sys.stdout.flush()
     return model, tokenizer
@@ -142,12 +170,26 @@ Output JSON:
 
     try:
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+        # Stop as soon as we have a complete plan (top-level ]); saves time vs max_new_tokens
+        from transformers import StoppingCriteria
+        import torch
+        class StopWhenPlanComplete(StoppingCriteria):
+            def __init__(self, tokenizer, prompt_str, device):
+                self.tokenizer = tokenizer
+                self.prompt_str = prompt_str
+                self.device = device
+            def __call__(self, input_ids, scores, **kwargs):
+                text = self.tokenizer.decode(input_ids[0], skip_special_tokens=True)
+                completion = text[len(self.prompt_str):].strip()
+                done = completion.endswith("}]") or completion.endswith("]")
+                return torch.tensor([[done]], device=self.device)
+        stop_criteria = StopWhenPlanComplete(tokenizer, prompt, model.device)
         outputs = model.generate(
             **inputs,
-            max_new_tokens=4096,
+            max_new_tokens=2048,
             do_sample=False,
-            temperature=0.0,
             pad_token_id=tokenizer.eos_token_id,
+            stopping_criteria=[stop_criteria],
         )
         generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
         completion = generated_text[len(prompt):].strip()
@@ -173,9 +215,7 @@ def generate_plans_for_df(df, query_column, model_name):
     for i, (_, row) in enumerate(tqdm(df.iterrows(), total=total), start=1):
         plan = generate_query_plan(row[query_column], model, tokenizer)
         plans.append(plan)
-        if i % 10 == 0 or i == total:
-            print(f"Generated {i}/{total} plans")
-            sys.stdout.flush()
+        print(f"Generated {i}/{total} plans", flush=True)
 
     df = df.copy()
     df["plan_json"] = plans
@@ -366,7 +406,7 @@ def execute_plans(df, query_column, use_hints, iterations, workers, verbose, tim
     total = len(df)
     print(f"Executing {total} queries with {workers} workers (use_hints={use_hints}, iterations={iterations}, timeout={timeout_ms}ms)")
 
-    with ProcessPoolExecutor(max_workers=workers) as exe:
+    with ThreadPoolExecutor(max_workers=workers) as exe:
         futures = {
             exe.submit(
                 worker_execute,

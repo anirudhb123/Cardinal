@@ -34,6 +34,7 @@ PROGRESS_RE = re.compile(r"Completed\s+(\d+)/(\d+)")
 GEN_PROGRESS_RE = re.compile(r"Generated\s+(\d+)/(\d+)\s+plans")
 
 MODEL_PRESETS = [
+    "openai-community/gpt2",
     "meta-llama/Llama-3.2-3B",
     "meta-llama/Llama-3.2-1B",
     "meta-llama/Meta-Llama-3-8B",
@@ -119,9 +120,11 @@ def _test_db(cfg: dict):
 
 def _save_csv(f) -> Path:
     """Write an uploaded file to temp_uploads/ and return its path."""
-    TEMP_DIR.mkdir(exist_ok=True)
-    dest = TEMP_DIR / f.name
-    dest.write_bytes(f.getbuffer())
+    TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    # Use a safe filename and write in one go to avoid holding the upload buffer long
+    safe_name = os.path.basename(f.name) or "uploaded.csv"
+    dest = TEMP_DIR / safe_name
+    dest.write_bytes(f.getvalue())
     return dest
 
 
@@ -158,6 +161,10 @@ def _reader_thread(proc, q: queue.Queue):
 def _start(cmd: list, db_cfg: dict, hf_token: str = ""):
     """Launch the pipeline subprocess and wire up the reader thread."""
     env = os.environ.copy()
+    # Use project-local Hugging Face cache and disable Xet (avoids 416 / permission errors)
+    hf_base = PROJECT_ROOT / ".cache" / "huggingface"
+    hf_cache = hf_base / "hub"
+    hf_cache.mkdir(parents=True, exist_ok=True)
     env.update({
         "POSTGRES_HOST": db_cfg["host"],
         "POSTGRES_DB": db_cfg["database"],
@@ -165,6 +172,10 @@ def _start(cmd: list, db_cfg: dict, hf_token: str = ""):
         "POSTGRES_PASSWORD": db_cfg["password"],
         "POSTGRES_PORT": str(db_cfg["port"]),
         "PYTHONPATH": str(PROJECT_ROOT / "scripts") + os.pathsep + env.get("PYTHONPATH", ""),
+        "HUGGINGFACE_HUB_CACHE": str(hf_cache),
+        "HF_HOME": str(hf_base),
+        "HF_HUB_DISABLE_XET": "1",
+        "HF_HUB_ENABLE_HF_TRANSFER": "0",
     })
     if hf_token:
         env["HF_TOKEN"] = hf_token
@@ -252,12 +263,19 @@ with st.sidebar:
     if uploaded:
         fid = f"{uploaded.name}_{uploaded.size}"
         if fid != st.session_state.uploaded_file_id:
-            p = _save_csv(uploaded)
-            st.session_state.uploaded_csv_path = str(p)
-            st.session_state.uploaded_csv_name = uploaded.name
-            st.session_state.uploaded_file_id = fid
-            preview_df = pd.read_csv(p, nrows=1)
-            st.session_state.csv_columns = list(preview_df.columns)
+            try:
+                p = _save_csv(uploaded)
+                preview_df = pd.read_csv(p, nrows=1)
+                st.session_state.uploaded_csv_path = str(p)
+                st.session_state.uploaded_csv_name = uploaded.name
+                st.session_state.uploaded_file_id = fid
+                st.session_state.csv_columns = list(preview_df.columns)
+            except Exception as e:
+                st.error(f"Failed to process CSV: {e}")
+                st.session_state.uploaded_file_id = None
+                st.session_state.uploaded_csv_path = None
+                st.session_state.uploaded_csv_name = None
+                st.session_state.csv_columns = []
 
     if st.session_state.uploaded_csv_name:
         st.caption(f"✅ **{st.session_state.uploaded_csv_name}**")
@@ -270,10 +288,13 @@ with st.sidebar:
                 "SQL query column", cols_avail, index=default_idx
             )
             with st.expander("Preview (first 5 rows)"):
-                st.dataframe(
-                    pd.read_csv(st.session_state.uploaded_csv_path, nrows=5),
-                    use_container_width=True,
-                )
+                try:
+                    st.dataframe(
+                        pd.read_csv(st.session_state.uploaded_csv_path, nrows=5),
+                        use_container_width=True,
+                    )
+                except Exception as e:
+                    st.warning(f"Could not load preview: {e}")
         else:
             query_col = st.text_input("SQL query column name", value="sql_text")
     else:
