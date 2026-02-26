@@ -1,0 +1,1306 @@
+query,sql_text,plan_json,execution_time,reward
+16014.sql,"SELECT u.DisplayName, COUNT(p.Id) AS PostCount, SUM(v.BountyAmount) AS TotalBounty
+FROM Users u
+JOIN Posts p ON u.Id = p.OwnerUserId
+LEFT JOIN Votes v ON p.Id = v.PostId AND v.VoteTypeId = 8
+WHERE u.Reputation > 1000
+GROUP BY u.DisplayName
+ORDER BY PostCount DESC
+LIMIT 10;
+","[{""Plan"": {""Node Type"": ""Limit"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 51.64, ""Total Cost"": 51.67, ""Plan Rows"": 10, ""Plan Width"": 114, ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 51.64, ""Total Cost"": 51.68, ""Plan Rows"": 17, ""Plan Width"": 114, ""Sort Key"": [""(count(p.id)) DESC""], ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Sorted"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 50.95, ""Total Cost"": 51.29, ""Plan Rows"": 17, ""Plan Width"": 114, ""Group Key"": [""u.displayname""], ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 50.95, ""Total Cost"": 51.0, ""Plan Rows"": 17, ""Plan Width"": 106, ""Sort Key"": [""u.displayname""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 21.69, ""Total Cost"": 50.61, ""Plan Rows"": 17, ""Plan Width"": 106, ""Inner Unique"": false, ""Hash Cond"": ""(v.postid = p.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""votes"", ""Alias"": ""v"", ""Startup Cost"": 0.0, ""Total Cost"": 28.88, ""Plan Rows"": 8, ""Plan Width"": 8, ""Filter"": ""(votetypeid = 8)""}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 21.48, ""Total Cost"": 21.48, ""Plan Rows"": 17, ""Plan Width"": 102, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 10.84, ""Total Cost"": 21.48, ""Plan Rows"": 17, ""Plan Width"": 102, ""Inner Unique"": true, ""Hash Cond"": ""(p.owneruserid = u.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 8}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.62, ""Total Cost"": 10.62, ""Plan Rows"": 17, ""Plan Width"": 102, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 17, ""Plan Width"": 102, ""Filter"": ""(reputation > 1000)""}]}]}]}]}]}]}]}]}}]",1165.24,-0.0004781138509934
+7397.sql,"WITH RankedPosts AS (
+    SELECT 
+        p.Id AS PostId,
+        p.Title,
+        p.ViewCount,
+        p.Score,
+        COUNT(c.Id) AS CommentCount,
+        ROW_NUMBER() OVER (PARTITION BY p.PostTypeId ORDER BY p.Score DESC, p.ViewCount DESC) AS Rank
+    FROM 
+        Posts p
+    LEFT JOIN 
+        Comments c ON p.Id = c.PostId
+    WHERE 
+        p.CreationDate >= cast('2024-10-01 12:34:56' as timestamp) - INTERVAL '1 year'
+    GROUP BY 
+        p.Id, p.Title, p.ViewCount, p.Score, p.PostTypeId
+),
+TopPosts AS (
+    SELECT 
+        rp.PostId,
+        rp.Title,
+        rp.ViewCount,
+        rp.Score,
+        rp.CommentCount,
+        CASE 
+            WHEN rp.Rank <= 10 THEN 'Top 10'
+            ELSE 'Other'
+        END AS RankingCategory
+    FROM 
+        RankedPosts rp
+)
+SELECT 
+    tp.RankingCategory,
+    AVG(tp.ViewCount) AS AvgViewCount,
+    SUM(tp.CommentCount) AS TotalComments,
+    SUM(tp.Score) AS TotalScore,
+    COUNT(tp.PostId) AS TotalPosts
+FROM 
+    TopPosts tp
+GROUP BY 
+    tp.RankingCategory
+ORDER BY 
+    tp.RankingCategory DESC;","[{""Plan"": {""Node Type"": ""Aggregate"", ""Strategy"": ""Sorted"", ""Partial Mode"": ""Simple"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 23.74, ""Total Cost"": 24.29, ""Plan Rows"": 17, ""Plan Width"": 112, ""Group Key"": [""(CASE WHEN (rp.rank <= 10) THEN 'Top 10'::text ELSE 'Other'::text END)""], ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 23.74, ""Total Cost"": 23.78, ""Plan Rows"": 17, ""Plan Width"": 52, ""Sort Key"": [""(CASE WHEN (rp.rank <= 10) THEN 'Top 10'::text ELSE 'Other'::text END) DESC""], ""Plans"": [{""Node Type"": ""Subquery Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Alias"": ""rp"", ""Startup Cost"": 22.8, ""Total Cost"": 23.39, ""Plan Rows"": 17, ""Plan Width"": 52, ""Plans"": [{""Node Type"": ""WindowAgg"", ""Parent Relationship"": ""Subquery"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 22.8, ""Total Cost"": 23.18, ""Plan Rows"": 17, ""Plan Width"": 546, ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 22.8, ""Total Cost"": 22.84, ""Plan Rows"": 17, ""Plan Width"": 538, ""Sort Key"": [""p.posttypeid"", ""p.score DESC"", ""p.viewcount DESC""], ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 22.28, ""Total Cost"": 22.45, ""Plan Rows"": 17, ""Plan Width"": 538, ""Group Key"": [""p.id""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 10.84, ""Total Cost"": 22.11, ""Plan Rows"": 34, ""Plan Width"": 534, ""Inner Unique"": true, ""Hash Cond"": ""(c.postid = p.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""comments"", ""Alias"": ""c"", ""Startup Cost"": 0.0, ""Total Cost"": 11.0, ""Plan Rows"": 100, ""Plan Width"": 8}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.62, ""Total Cost"": 10.62, ""Plan Rows"": 17, ""Plan Width"": 530, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 17, ""Plan Width"": 530, ""Filter"": ""(creationdate >= '2023-10-01 12:34:56'::timestamp without time zone)""}]}]}]}]}]}]}]}]}}]",1018.7,-0.0002785618908751
+2724.sql,"
+WITH RankedPosts AS (
+    SELECT 
+        p.Id AS PostId,
+        p.Title,
+        p.CreationDate,
+        p.Score,
+        ROW_NUMBER() OVER (PARTITION BY p.OwnerUserId ORDER BY p.Score DESC) AS ScoreRank,
+        COUNT(c.Id) AS CommentCount,
+        AVG(CASE WHEN v.VoteTypeId = 8 THEN v.BountyAmount ELSE NULL END) AS AvgBounty
+    FROM 
+        Posts p 
+    LEFT JOIN 
+        Comments c ON p.Id = c.PostId 
+    LEFT JOIN 
+        Votes v ON p.Id = v.PostId
+    GROUP BY 
+        p.Id, p.OwnerUserId, p.Title, p.CreationDate, p.Score
+),
+UserStats AS (
+    SELECT 
+        u.Id AS UserId,
+        u.DisplayName,
+        u.Reputation,
+        u.CreationDate,
+        u.LastAccessDate,
+        COALESCE(SUM(CASE WHEN b.Class = 1 THEN 1 ELSE 0 END), 0) AS GoldBadges,
+        COALESCE(SUM(CASE WHEN b.Class = 2 THEN 1 ELSE 0 END), 0) AS SilverBadges,
+        COALESCE(SUM(CASE WHEN b.Class = 3 THEN 1 ELSE 0 END), 0) AS BronzeBadges
+    FROM 
+        Users u
+    LEFT JOIN 
+        Badges b ON u.Id = b.UserId
+    GROUP BY 
+        u.Id, u.DisplayName, u.Reputation, u.CreationDate, u.LastAccessDate
+)
+SELECT 
+    us.DisplayName,
+    us.Reputation,
+    rp.Title,
+    rp.Score,
+    rp.CreationDate,
+    rp.CommentCount,
+    us.GoldBadges,
+    us.SilverBadges,
+    us.BronzeBadges,
+    rp.AvgBounty
+FROM 
+    RankedPosts rp
+JOIN 
+    UserStats us ON rp.PostId = us.UserId
+WHERE 
+    rp.ScoreRank <= 3
+    AND us.Reputation > (SELECT AVG(Reputation) FROM Users WHERE Reputation IS NOT NULL)
+ORDER BY 
+    us.Reputation DESC, rp.Score DESC
+LIMIT 10;
+","[{""Plan"": {""Node Type"": ""Limit"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 139.57, ""Total Cost"": 139.6, ""Plan Rows"": 10, ""Plan Width"": 694, ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Plain"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""InitPlan"", ""Subplan Name"": ""InitPlan 1 (returns $0)"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.63, ""Total Cost"": 10.64, ""Plan Rows"": 1, ""Plan Width"": 32, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""users"", ""Alias"": ""users"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 4, ""Filter"": ""(reputation IS NOT NULL)""}]}, {""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 128.94, ""Total Cost"": 128.98, ""Plan Rows"": 17, ""Plan Width"": 694, ""Sort Key"": [""us.reputation DESC"", ""p.score DESC""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 126.73, ""Total Cost"": 128.59, ""Plan Rows"": 17, ""Plan Width"": 694, ""Inner Unique"": false, ""Hash Cond"": ""(p.id = us.userid)"", ""Plans"": [{""Node Type"": ""WindowAgg"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 96.08, ""Total Cost"": 97.08, ""Plan Rows"": 50, ""Plan Width"": 584, ""Run Condition"": ""(row_number() OVER (?) <= 3)"", ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 96.08, ""Total Cost"": 96.21, ""Plan Rows"": 50, ""Plan Width"": 576, ""Sort Key"": [""p.owneruserid"", ""p.score DESC""], ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 94.05, ""Total Cost"": 94.67, ""Plan Rows"": 50, ""Plan Width"": 576, ""Group Key"": [""p.id""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 23.65, ""Total Cost"": 63.85, ""Plan Rows"": 3020, ""Plan Width"": 546, ""Inner Unique"": false, ""Hash Cond"": ""(v.postid = p.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""votes"", ""Alias"": ""v"", ""Startup Cost"": 0.0, ""Total Cost"": 25.1, ""Plan Rows"": 1510, ""Plan Width"": 10}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 22.4, ""Total Cost"": 22.4, ""Plan Rows"": 100, ""Plan Width"": 540, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 11.12, ""Total Cost"": 22.4, ""Plan Rows"": 100, ""Plan Width"": 540, ""Inner Unique"": true, ""Hash Cond"": ""(c.postid = p.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""comments"", ""Alias"": ""c"", ""Startup Cost"": 0.0, ""Total Cost"": 11.0, ""Plan Rows"": 100, ""Plan Width"": 8}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.5, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 536, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 536}]}]}]}]}]}]}]}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 30.43, ""Total Cost"": 30.43, ""Plan Rows"": 17, ""Plan Width"": 130, ""Plans"": [{""Node Type"": ""Subquery Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Alias"": ""us"", ""Startup Cost"": 30.09, ""Total Cost"": 30.43, ""Plan Rows"": 17, ""Plan Width"": 130, ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Subquery"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 30.09, ""Total Cost"": 30.26, ""Plan Rows"": 17, ""Plan Width"": 146, ""Group Key"": [""u.id""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 10.96, ""Total Cost"": 27.17, ""Plan Rows"": 167, ""Plan Width"": 124, ""Inner Unique"": true, ""Hash Cond"": ""(b.userid = u.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""badges"", ""Alias"": ""b"", ""Startup Cost"": 0.0, ""Total Cost"": 14.9, ""Plan Rows"": 490, ""Plan Width"": 6}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.75, ""Total Cost"": 10.75, ""Plan Rows"": 17, ""Plan Width"": 122, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.0, ""Total Cost"": 10.75, ""Plan Rows"": 17, ""Plan Width"": 122, ""Filter"": ""((reputation)::numeric > $0)""}]}]}]}]}]}]}]}]}}]",3610.19,-0.0019631096020981
+19677.sql,"SELECT 
+    u.DisplayName,
+    p.Title,
+    p.CreationDate,
+    p.Score,
+    p.ViewCount
+FROM 
+    Posts p
+JOIN 
+    Users u ON p.OwnerUserId = u.Id
+WHERE 
+    p.PostTypeId = 1 
+ORDER BY 
+    p.Score DESC
+LIMIT 10;","[{""Plan"": {""Node Type"": ""Limit"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 19.11, ""Total Cost"": 19.11, ""Plan Rows"": 1, ""Plan Width"": 630, ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 19.11, ""Total Cost"": 19.11, ""Plan Rows"": 1, ""Plan Width"": 630, ""Sort Key"": [""p.score DESC""], ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 0.14, ""Total Cost"": 19.1, ""Plan Rows"": 1, ""Plan Width"": 630, ""Inner Unique"": true, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 1, ""Plan Width"": 536, ""Filter"": ""(posttypeid = 1)""}, {""Node Type"": ""Index Scan"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Scan Direction"": ""Forward"", ""Index Name"": ""users_pkey"", ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.14, ""Total Cost"": 8.16, ""Plan Rows"": 1, ""Plan Width"": 102, ""Index Cond"": ""(id = p.owneruserid)""}]}]}]}}]",918.99,-0.0001280713813457
+15440.sql,"
+SELECT 
+    p.Id AS PostId,
+    p.Title,
+    p.CreationDate,
+    u.DisplayName AS Author,
+    COUNT(c.Id) AS CommentCount,
+    SUM(CASE WHEN v.VoteTypeId = 2 THEN 1 ELSE 0 END) AS UpVoteCount,
+    SUM(CASE WHEN v.VoteTypeId = 3 THEN 1 ELSE 0 END) AS DownVoteCount
+FROM 
+    Posts p
+JOIN 
+    Users u ON p.OwnerUserId = u.Id
+LEFT JOIN 
+    Comments c ON p.Id = c.PostId
+LEFT JOIN 
+    Votes v ON p.Id = v.PostId
+WHERE 
+    p.PostTypeId = 1  
+GROUP BY 
+    p.Id, p.Title, p.CreationDate, u.DisplayName
+ORDER BY 
+    p.CreationDate DESC
+LIMIT 10;
+","[{""Plan"": {""Node Type"": ""Limit"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 65.24, ""Total Cost"": 65.27, ""Plan Rows"": 10, ""Plan Width"": 650, ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 65.24, ""Total Cost"": 65.37, ""Plan Rows"": 50, ""Plan Width"": 650, ""Sort Key"": [""p.creationdate DESC""], ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 63.66, ""Total Cost"": 64.16, ""Plan Rows"": 50, ""Plan Width"": 650, ""Group Key"": [""p.id"", ""u.displayname""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 31.36, ""Total Cost"": 62.61, ""Plan Rows"": 60, ""Plan Width"": 632, ""Inner Unique"": false, ""Hash Cond"": ""(p.id = c.postid)"", ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 19.11, ""Total Cost"": 49.95, ""Plan Rows"": 30, ""Plan Width"": 628, ""Inner Unique"": false, ""Hash Cond"": ""(v.postid = p.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""votes"", ""Alias"": ""v"", ""Startup Cost"": 0.0, ""Total Cost"": 25.1, ""Plan Rows"": 1510, ""Plan Width"": 6}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 19.1, ""Total Cost"": 19.1, ""Plan Rows"": 1, ""Plan Width"": 626, ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 0.14, ""Total Cost"": 19.1, ""Plan Rows"": 1, ""Plan Width"": 626, ""Inner Unique"": true, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 1, ""Plan Width"": 532, ""Filter"": ""(posttypeid = 1)""}, {""Node Type"": ""Index Scan"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Scan Direction"": ""Forward"", ""Index Name"": ""users_pkey"", ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.14, ""Total Cost"": 8.16, ""Plan Rows"": 1, ""Plan Width"": 102, ""Index Cond"": ""(id = p.owneruserid)""}]}]}]}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 11.0, ""Total Cost"": 11.0, ""Plan Rows"": 100, ""Plan Width"": 8, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""comments"", ""Alias"": ""c"", ""Startup Cost"": 0.0, ""Total Cost"": 11.0, ""Plan Rows"": 100, ""Plan Width"": 8}]}]}]}]}]}}]",2714.22,-0.0003101996487315
+9563.sql,"WITH RankedPosts AS (
+    SELECT p.Id AS PostId, 
+           p.Title, 
+           p.Score, 
+           p.CreationDate, 
+           u.DisplayName AS Author, 
+           ROW_NUMBER() OVER (PARTITION BY p.PostTypeId ORDER BY p.Score DESC) as PostRank
+    FROM Posts p
+    JOIN Users u ON p.OwnerUserId = u.Id
+    WHERE p.CreationDate >= cast('2024-10-01 12:34:56' as timestamp) - INTERVAL '1 year'
+      AND p.ViewCount > 100
+),
+AggregatedVotes AS (
+    SELECT v.PostId, 
+           SUM(CASE WHEN vt.Name = 'UpMod' THEN 1 ELSE 0 END) AS UpVotes, 
+           SUM(CASE WHEN vt.Name = 'DownMod' THEN 1 ELSE 0 END) AS DownVotes
+    FROM Votes v
+    JOIN VoteTypes vt ON v.VoteTypeId = vt.Id
+    GROUP BY v.PostId
+),
+TopPosts AS (
+    SELECT rp.PostId, 
+           rp.Title, 
+           rp.Score, 
+           rp.CreationDate, 
+           rp.Author, 
+           av.UpVotes, 
+           av.DownVotes
+    FROM RankedPosts rp
+    LEFT JOIN AggregatedVotes av ON rp.PostId = av.PostId
+    WHERE rp.PostRank <= 5 
+)
+SELECT tp.Title, 
+       tp.Score, 
+       tp.CreationDate, 
+       tp.Author, 
+       COALESCE(tp.UpVotes, 0) AS TotalUpVotes, 
+       COALESCE(tp.DownVotes, 0) AS TotalDownVotes
+FROM TopPosts tp
+ORDER BY tp.Score DESC, tp.CreationDate DESC;","[{""Plan"": {""Node Type"": ""Sort"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 97.14, ""Total Cost"": 97.15, ""Plan Rows"": 6, ""Plan Width"": 642, ""Sort Key"": [""rp.score DESC"", ""rp.creationdate DESC""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 92.25, ""Total Cost"": 97.06, ""Plan Rows"": 6, ""Plan Width"": 642, ""Inner Unique"": false, ""Hash Cond"": ""(v.postid = rp.postid)"", ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 70.35, ""Total Cost"": 72.35, ""Plan Rows"": 200, ""Plan Width"": 20, ""Group Key"": [""v.postid""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 22.38, ""Total Cost"": 51.47, ""Plan Rows"": 1510, ""Plan Width"": 122, ""Inner Unique"": true, ""Hash Cond"": ""(v.votetypeid = vt.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""votes"", ""Alias"": ""v"", ""Startup Cost"": 0.0, ""Total Cost"": 25.1, ""Plan Rows"": 1510, ""Plan Width"": 6}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 15.5, ""Total Cost"": 15.5, ""Plan Rows"": 550, ""Plan Width"": 120, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""votetypes"", ""Alias"": ""vt"", ""Startup Cost"": 0.0, ""Total Cost"": 15.5, ""Plan Rows"": 550, ""Plan Width"": 120}]}]}]}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 21.83, ""Total Cost"": 21.83, ""Plan Rows"": 6, ""Plan Width"": 630, ""Plans"": [{""Node Type"": ""Subquery Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Alias"": ""rp"", ""Startup Cost"": 21.65, ""Total Cost"": 21.83, ""Plan Rows"": 6, ""Plan Width"": 630, ""Plans"": [{""Node Type"": ""WindowAgg"", ""Parent Relationship"": ""Subquery"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 21.65, ""Total Cost"": 21.77, ""Plan Rows"": 6, ""Plan Width"": 640, ""Run Condition"": ""(row_number() OVER (?) <= 5)"", ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 21.65, ""Total Cost"": 21.67, ""Plan Rows"": 6, ""Plan Width"": 632, ""Sort Key"": [""p.posttypeid"", ""p.score DESC""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 10.82, ""Total Cost"": 21.57, ""Plan Rows"": 6, ""Plan Width"": 632, ""Inner Unique"": false, ""Hash Cond"": ""(u.id = p.owneruserid)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 102}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.75, ""Total Cost"": 10.75, ""Plan Rows"": 6, ""Plan Width"": 538, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.75, ""Plan Rows"": 6, ""Plan Width"": 538, ""Filter"": ""((creationdate >= '2023-10-01 12:34:56'::timestamp without time zone) AND (viewcount > 100))""}]}]}]}]}]}]}]}]}}]",861.52,-0.0002439075657173
+26260.sql,"
+WITH RankedPosts AS (
+    SELECT 
+        p.Id,
+        p.Title,
+        p.CreationDate,
+        p.ViewCount,
+        p.Score,
+        ARRAY_AGG(DISTINCT t.TagName) AS Tags,
+        COUNT(DISTINCT a.Id) AS AnswerCount,
+        ROW_NUMBER() OVER (ORDER BY p.Score DESC, p.ViewCount DESC) AS PostRank
+    FROM 
+        Posts p
+    LEFT JOIN 
+        Posts a ON p.Id = a.ParentId
+    LEFT JOIN 
+        UNNEST(string_to_array(SUBSTRING(p.Tags FROM 2 FOR LENGTH(p.Tags) - 2), '><')) AS tag_name ON TRUE 
+    JOIN 
+        Tags t ON t.TagName = tag_name
+    WHERE 
+        p.PostTypeId = 1 
+    GROUP BY 
+        p.Id, p.Title, p.CreationDate, p.ViewCount, p.Score
+),
+FilteredPosts AS (
+    SELECT 
+        rp.*,
+        (SELECT COUNT(*) FROM Votes v WHERE v.PostId = rp.Id AND v.VoteTypeId = 2) AS Upvotes,
+        (SELECT COUNT(*) FROM Votes v WHERE v.PostId = rp.Id AND v.VoteTypeId = 3) AS Downvotes
+    FROM 
+        RankedPosts rp
+    WHERE 
+        rp.AnswerCount > 0
+)
+
+SELECT 
+    fp.Id,
+    fp.Title,
+    fp.CreationDate,
+    fp.ViewCount,
+    fp.Score,
+    fp.AnswerCount,
+    fp.Tags,
+    fp.Upvotes,
+    fp.Downvotes,
+    ROUND(COALESCE(fp.Upvotes::FLOAT / NULLIF(fp.Upvotes + fp.Downvotes, 0), 0), 2) AS UpvoteRatio
+FROM 
+    FilteredPosts fp
+WHERE 
+    fp.PostRank <= 10 
+ORDER BY 
+    fp.Score DESC, fp.ViewCount DESC;
+",,,-0.0013548972365323
+15490.sql,"SELECT 
+    p.Title,
+    p.CreationDate,
+    p.ViewCount,
+    p.Score,
+    u.DisplayName AS OwnerDisplayName
+FROM 
+    Posts p
+JOIN 
+    Users u ON p.OwnerUserId = u.Id
+WHERE 
+    p.PostTypeId = 1 
+ORDER BY 
+    p.CreationDate DESC
+LIMIT 10;","[{""Plan"": {""Node Type"": ""Limit"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 19.11, ""Total Cost"": 19.11, ""Plan Rows"": 1, ""Plan Width"": 630, ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 19.11, ""Total Cost"": 19.11, ""Plan Rows"": 1, ""Plan Width"": 630, ""Sort Key"": [""p.creationdate DESC""], ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 0.14, ""Total Cost"": 19.1, ""Plan Rows"": 1, ""Plan Width"": 630, ""Inner Unique"": true, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 1, ""Plan Width"": 536, ""Filter"": ""(posttypeid = 1)""}, {""Node Type"": ""Index Scan"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Scan Direction"": ""Forward"", ""Index Name"": ""users_pkey"", ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.14, ""Total Cost"": 8.16, ""Plan Rows"": 1, ""Plan Width"": 102, ""Index Cond"": ""(id = p.owneruserid)""}]}]}]}}]",260.07,-0.0001364212396358
+18098.sql,"SELECT 
+    p.Id AS PostId,
+    p.Title,
+    p.CreationDate,
+    u.DisplayName AS OwnerDisplayName,
+    COUNT(c.Id) AS CommentCount,
+    COUNT(v.Id) AS VoteCount
+FROM 
+    Posts p
+JOIN 
+    Users u ON p.OwnerUserId = u.Id
+LEFT JOIN 
+    Comments c ON p.Id = c.PostId
+LEFT JOIN 
+    Votes v ON p.Id = v.PostId
+WHERE 
+    p.PostTypeId = 1  
+GROUP BY 
+    p.Id, p.Title, p.CreationDate, u.DisplayName
+ORDER BY 
+    p.CreationDate DESC
+LIMIT 10;","[{""Plan"": {""Node Type"": ""Limit"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 64.79, ""Total Cost"": 64.82, ""Plan Rows"": 10, ""Plan Width"": 642, ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 64.79, ""Total Cost"": 64.92, ""Plan Rows"": 50, ""Plan Width"": 642, ""Sort Key"": [""p.creationdate DESC""], ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 63.21, ""Total Cost"": 63.71, ""Plan Rows"": 50, ""Plan Width"": 642, ""Group Key"": [""p.id"", ""u.displayname""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 31.36, ""Total Cost"": 62.61, ""Plan Rows"": 60, ""Plan Width"": 634, ""Inner Unique"": false, ""Hash Cond"": ""(p.id = c.postid)"", ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 19.11, ""Total Cost"": 49.95, ""Plan Rows"": 30, ""Plan Width"": 630, ""Inner Unique"": false, ""Hash Cond"": ""(v.postid = p.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""votes"", ""Alias"": ""v"", ""Startup Cost"": 0.0, ""Total Cost"": 25.1, ""Plan Rows"": 1510, ""Plan Width"": 8}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 19.1, ""Total Cost"": 19.1, ""Plan Rows"": 1, ""Plan Width"": 626, ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 0.14, ""Total Cost"": 19.1, ""Plan Rows"": 1, ""Plan Width"": 626, ""Inner Unique"": true, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 1, ""Plan Width"": 532, ""Filter"": ""(posttypeid = 1)""}, {""Node Type"": ""Index Scan"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Scan Direction"": ""Forward"", ""Index Name"": ""users_pkey"", ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.14, ""Total Cost"": 8.16, ""Plan Rows"": 1, ""Plan Width"": 102, ""Index Cond"": ""(id = p.owneruserid)""}]}]}]}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 11.0, ""Total Cost"": 11.0, ""Plan Rows"": 100, ""Plan Width"": 8, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""comments"", ""Alias"": ""c"", ""Startup Cost"": 0.0, ""Total Cost"": 11.0, ""Plan Rows"": 100, ""Plan Width"": 8}]}]}]}]}]}}]",2414.3,-0.0003478464086523
+12033.sql,"WITH UserPostStats AS (
+    SELECT 
+        u.Id AS UserId,
+        COUNT(p.Id) AS TotalPosts,
+        SUM(CASE WHEN p.PostTypeId = 1 THEN 1 ELSE 0 END) AS TotalQuestions,
+        SUM(CASE WHEN p.PostTypeId = 2 THEN 1 ELSE 0 END) AS TotalAnswers,
+        SUM(p.Score) AS TotalScore,
+        AVG(p.ViewCount) AS AvgViewCount
+    FROM 
+        Users u
+    LEFT JOIN 
+        Posts p ON u.Id = p.OwnerUserId
+    GROUP BY 
+        u.Id
+),
+BadgeStats AS (
+    SELECT 
+        b.UserId,
+        COUNT(b.Id) AS TotalBadges,
+        SUM(CASE WHEN b.Class = 1 THEN 1 ELSE 0 END) AS TotalGoldBadges,
+        SUM(CASE WHEN b.Class = 2 THEN 1 ELSE 0 END) AS TotalSilverBadges,
+        SUM(CASE WHEN b.Class = 3 THEN 1 ELSE 0 END) AS TotalBronzeBadges
+    FROM 
+        Badges b
+    GROUP BY 
+        b.UserId
+)
+SELECT 
+    u.DisplayName,
+    ups.TotalPosts,
+    ups.TotalQuestions,
+    ups.TotalAnswers,
+    ups.TotalScore,
+    ups.AvgViewCount,
+    bs.TotalBadges,
+    bs.TotalGoldBadges,
+    bs.TotalSilverBadges,
+    bs.TotalBronzeBadges
+FROM 
+    Users u
+LEFT JOIN 
+    UserPostStats ups ON u.Id = ups.UserId
+LEFT JOIN 
+    BadgeStats bs ON u.Id = bs.UserId
+ORDER BY 
+    ups.TotalScore DESC,
+    ups.TotalPosts DESC;","[{""Plan"": {""Node Type"": ""Sort"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 66.43, ""Total Cost"": 66.56, ""Plan Rows"": 50, ""Plan Width"": 194, ""Sort Key"": [""ups.totalscore DESC"", ""ups.totalposts DESC""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 60.34, ""Total Cost"": 65.02, ""Plan Rows"": 50, ""Plan Width"": 194, ""Inner Unique"": true, ""Hash Cond"": ""(u.id = ups.userid)"", ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 35.83, ""Total Cost"": 40.36, ""Plan Rows"": 50, ""Plan Width"": 134, ""Inner Unique"": true, ""Hash Cond"": ""(b.userid = u.id)"", ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 24.7, ""Total Cost"": 26.7, ""Plan Rows"": 200, ""Plan Width"": 36, ""Group Key"": [""b.userid""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""badges"", ""Alias"": ""b"", ""Startup Cost"": 0.0, ""Total Cost"": 14.9, ""Plan Rows"": 490, ""Plan Width"": 10}]}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.5, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 102, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 102}]}]}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 23.89, ""Total Cost"": 23.89, ""Plan Rows"": 50, ""Plan Width"": 68, ""Plans"": [{""Node Type"": ""Subquery Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Alias"": ""ups"", ""Startup Cost"": 22.77, ""Total Cost"": 23.89, ""Plan Rows"": 50, ""Plan Width"": 68, ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Subquery"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 22.77, ""Total Cost"": 23.39, ""Plan Rows"": 50, ""Plan Width"": 68, ""Group Key"": [""u_1.id""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 11.12, ""Total Cost"": 21.77, ""Plan Rows"": 50, ""Plan Width"": 18, ""Inner Unique"": true, ""Hash Cond"": ""(p.owneruserid = u_1.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 18}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.5, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 4, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""users"", ""Alias"": ""u_1"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 4}]}]}]}]}]}]}]}}]",1472.13,-0.0008727049865474
+25080.sql,"WITH RankedPosts AS (
+    SELECT 
+        p.Id AS PostId,
+        p.Title,
+        p.Tags,
+        p.Body,
+        COUNT(c.Id) AS CommentCount,
+        SUM(CASE WHEN v.VoteTypeId = 2 THEN 1 ELSE 0 END) AS UpVotes,
+        SUM(CASE WHEN v.VoteTypeId = 3 THEN 1 ELSE 0 END) AS DownVotes,
+        ROW_NUMBER() OVER (PARTITION BY p.Tags ORDER BY COUNT(c.Id) DESC) AS Rank
+    FROM 
+        Posts p
+    LEFT JOIN 
+        Comments c ON p.Id = c.PostId
+    LEFT JOIN 
+        Votes v ON p.Id = v.PostId
+    WHERE 
+        p.PostTypeId = 1 
+    GROUP BY 
+        p.Id, p.Title, p.Tags, p.Body
+),
+FilteredPosts AS (
+    SELECT 
+        PostId,
+        Title,
+        Tags,
+        Body,
+        CommentCount,
+        UpVotes,
+        DownVotes
+    FROM 
+        RankedPosts
+    WHERE 
+        Rank <= 5 
+)
+SELECT 
+    fp.Tags,
+    STRING_AGG(fp.Title, '; ') AS TopQuestions,
+    SUM(fp.CommentCount) AS TotalComments,
+    SUM(fp.UpVotes) AS TotalUpVotes,
+    SUM(fp.DownVotes) AS TotalDownVotes,
+    COUNT(fp.PostId) AS TotalPosts
+FROM 
+    FilteredPosts fp
+GROUP BY 
+    fp.Tags
+ORDER BY 
+    TotalUpVotes DESC
+LIMIT 10;","[{""Plan"": {""Node Type"": ""Limit"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 53.45, ""Total Cost"": 53.46, ""Plan Rows"": 1, ""Plan Width"": 652, ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 53.45, ""Total Cost"": 53.46, ""Plan Rows"": 1, ""Plan Width"": 652, ""Sort Key"": [""(sum((sum(CASE WHEN (v.votetypeid = 2) THEN 1 ELSE 0 END)))) DESC""], ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Sorted"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 53.37, ""Total Cost"": 53.44, ""Plan Rows"": 1, ""Plan Width"": 652, ""Group Key"": [""p.tags""], ""Plans"": [{""Node Type"": ""WindowAgg"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 53.37, ""Total Cost"": 53.4, ""Plan Rows"": 1, ""Plan Width"": 1100, ""Run Condition"": ""(row_number() OVER (?) <= 5)"", ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 53.37, ""Total Cost"": 53.38, ""Plan Rows"": 1, ""Plan Width"": 1092, ""Sort Key"": [""p.tags"", ""(count(c.id)) DESC""], ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 53.35, ""Total Cost"": 53.36, ""Plan Rows"": 1, ""Plan Width"": 1092, ""Group Key"": [""p.id""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 22.89, ""Total Cost"": 52.45, ""Plan Rows"": 60, ""Plan Width"": 1074, ""Inner Unique"": false, ""Hash Cond"": ""(p.id = c.postid)"", ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 10.64, ""Total Cost"": 39.79, ""Plan Rows"": 30, ""Plan Width"": 1070, ""Inner Unique"": true, ""Hash Cond"": ""(v.postid = p.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""votes"", ""Alias"": ""v"", ""Startup Cost"": 0.0, ""Total Cost"": 25.1, ""Plan Rows"": 1510, ""Plan Width"": 6}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.62, ""Total Cost"": 10.62, ""Plan Rows"": 1, ""Plan Width"": 1068, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 1, ""Plan Width"": 1068, ""Filter"": ""(posttypeid = 1)""}]}]}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 11.0, ""Total Cost"": 11.0, ""Plan Rows"": 100, ""Plan Width"": 8, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""comments"", ""Alias"": ""c"", ""Startup Cost"": 0.0, ""Total Cost"": 11.0, ""Plan Rows"": 100, ""Plan Width"": 8}]}]}]}]}]}]}]}]}}]",5467.5,-0.0005849727310762
+13845.sql,"WITH UserStats AS (
+    SELECT 
+        U.Id AS UserId,
+        U.Reputation,
+        U.Views,
+        COUNT(DISTINCT P.Id) AS PostCount,
+        SUM(CASE WHEN P.PostTypeId = 1 THEN 1 ELSE 0 END) AS QuestionCount,
+        SUM(CASE WHEN P.PostTypeId = 2 THEN 1 ELSE 0 END) AS AnswerCount,
+        SUM(CASE WHEN P.PostTypeId IN (1, 2) THEN P.Score ELSE 0 END) AS TotalScore
+    FROM 
+        Users U
+    LEFT JOIN 
+        Posts P ON U.Id = P.OwnerUserId
+    GROUP BY 
+        U.Id, U.Reputation, U.Views
+),
+TopBadgeUsers AS (
+    SELECT 
+        B.UserId,
+        COUNT(B.Id) AS BadgeCount
+    FROM 
+        Badges B
+    GROUP BY 
+        B.UserId
+)
+SELECT 
+    U.UserId,
+    U.Reputation,
+    U.Views,
+    U.PostCount,
+    U.QuestionCount,
+    U.AnswerCount,
+    U.TotalScore,
+    COALESCE(B.BadgeCount, 0) AS BadgeCount
+FROM 
+    UserStats U
+LEFT JOIN 
+    TopBadgeUsers B ON U.UserId = B.UserId
+ORDER BY 
+    U.Reputation DESC, U.TotalScore DESC
+LIMIT 100;","[{""Plan"": {""Node Type"": ""Limit"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 49.94, ""Total Cost"": 50.06, ""Plan Rows"": 50, ""Plan Width"": 52, ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 49.94, ""Total Cost"": 50.06, ""Plan Rows"": 50, ""Plan Width"": 52, ""Sort Key"": [""u.reputation DESC"", ""(sum(CASE WHEN (p.posttypeid = ANY ('{1,2}'::integer[])) THEN p.score ELSE 0 END)) DESC""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 43.28, ""Total Cost"": 48.53, ""Plan Rows"": 50, ""Plan Width"": 52, ""Inner Unique"": false, ""Hash Cond"": ""(b.userid = u.id)"", ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 17.35, ""Total Cost"": 19.35, ""Plan Rows"": 200, ""Plan Width"": 12, ""Group Key"": [""b.userid""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""badges"", ""Alias"": ""b"", ""Startup Cost"": 0.0, ""Total Cost"": 14.9, ""Plan Rows"": 490, ""Plan Width"": 8}]}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 25.3, ""Total Cost"": 25.3, ""Plan Rows"": 50, ""Plan Width"": 44, ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Sorted"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 23.18, ""Total Cost"": 24.8, ""Plan Rows"": 50, ""Plan Width"": 44, ""Group Key"": [""u.id""], ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 23.18, ""Total Cost"": 23.3, ""Plan Rows"": 50, ""Plan Width"": 22, ""Sort Key"": [""u.id""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 11.12, ""Total Cost"": 21.77, ""Plan Rows"": 50, ""Plan Width"": 22, ""Inner Unique"": true, ""Hash Cond"": ""(p.owneruserid = u.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 14}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.5, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 12, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 12}]}]}]}]}]}]}]}]}}]",1283.23,-0.0005354286297189
+6566.sql,"
+WITH UserActivity AS (
+    SELECT 
+        u.Id AS UserId,
+        u.DisplayName,
+        COUNT(p.Id) AS TotalPosts,
+        SUM(CASE WHEN p.PostTypeId = 1 THEN 1 ELSE 0 END) AS TotalQuestions,
+        SUM(CASE WHEN p.PostTypeId = 2 THEN 1 ELSE 0 END) AS TotalAnswers,
+        SUM(CASE WHEN p.PostTypeId = 3 THEN 1 ELSE 0 END) AS TotalWikis,
+        SUM(CASE WHEN v.VoteTypeId = 2 THEN 1 ELSE 0 END) AS TotalUpvotes,
+        SUM(CASE WHEN v.VoteTypeId = 3 THEN 1 ELSE 0 END) AS TotalDownvotes,
+        SUM(CASE WHEN b.Date IS NOT NULL THEN 1 ELSE 0 END) AS TotalBadges
+    FROM 
+        Users u
+    LEFT JOIN 
+        Posts p ON u.Id = p.OwnerUserId
+    LEFT JOIN 
+        Votes v ON p.Id = v.PostId AND v.UserId = u.Id
+    LEFT JOIN 
+        Badges b ON u.Id = b.UserId
+    GROUP BY 
+        u.Id, u.DisplayName
+),
+TopUsers AS (
+    SELECT 
+        UserId,
+        DisplayName,
+        TotalPosts,
+        TotalQuestions,
+        TotalAnswers,
+        TotalWikis,
+        TotalUpvotes,
+        TotalDownvotes,
+        TotalBadges,
+        RANK() OVER (ORDER BY TotalPosts DESC) AS Rank
+    FROM 
+        UserActivity
+)
+SELECT 
+    t.UserId,
+    t.DisplayName,
+    t.TotalPosts,
+    t.TotalQuestions,
+    t.TotalAnswers,
+    t.TotalWikis,
+    t.TotalUpvotes,
+    t.TotalDownvotes,
+    t.TotalBadges,
+    t.Rank
+FROM 
+    TopUsers t
+WHERE 
+    t.Rank <= 10
+ORDER BY 
+    t.Rank;
+","[{""Plan"": {""Node Type"": ""Sort"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 98.68, ""Total Cost"": 98.8, ""Plan Rows"": 50, ""Plan Width"": 166, ""Sort Key"": [""(rank() OVER (?))""], ""Plans"": [{""Node Type"": ""WindowAgg"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 95.89, ""Total Cost"": 96.77, ""Plan Rows"": 50, ""Plan Width"": 166, ""Run Condition"": ""(rank() OVER (?) <= 10)"", ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 95.89, ""Total Cost"": 96.02, ""Plan Rows"": 50, ""Plan Width"": 158, ""Sort Key"": [""useractivity.totalposts DESC""], ""Plans"": [{""Node Type"": ""Subquery Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Alias"": ""useractivity"", ""Startup Cost"": 93.48, ""Total Cost"": 94.48, ""Plan Rows"": 50, ""Plan Width"": 158, ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Subquery"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 93.48, ""Total Cost"": 93.98, ""Plan Rows"": 50, ""Plan Width"": 158, ""Group Key"": [""u.id""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 59.59, ""Total Cost"": 77.55, ""Plan Rows"": 490, ""Plan Width"": 118, ""Inner Unique"": false, ""Hash Cond"": ""(b.userid = u.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""badges"", ""Alias"": ""b"", ""Startup Cost"": 0.0, ""Total Cost"": 14.9, ""Plan Rows"": 490, ""Plan Width"": 12}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 58.96, ""Total Cost"": 58.96, ""Plan Rows"": 50, ""Plan Width"": 110, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 22.52, ""Total Cost"": 58.96, ""Plan Rows"": 50, ""Plan Width"": 110, ""Inner Unique"": false, ""Hash Cond"": ""((v.postid = p.id) AND (v.userid = u.id))"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""votes"", ""Alias"": ""v"", ""Startup Cost"": 0.0, ""Total Cost"": 25.1, ""Plan Rows"": 1510, ""Plan Width"": 10}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 21.77, ""Total Cost"": 21.77, ""Plan Rows"": 50, ""Plan Width"": 108, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 11.12, ""Total Cost"": 21.77, ""Plan Rows"": 50, ""Plan Width"": 108, ""Inner Unique"": true, ""Hash Cond"": ""(p.owneruserid = u.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 10}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.5, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 102, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 102}]}]}]}]}]}]}]}]}]}]}]}}]",32295.37,-0.0013930990448365
+28677.sql,"
+WITH RankedPosts AS (
+    SELECT 
+        p.Id AS PostId,
+        p.Title,
+        p.Body,
+        COUNT(c.Id) AS CommentCount,
+        COUNT(DISTINCT v.UserId) AS VoteCount,
+        ARRAY_AGG(DISTINCT t.TagName) AS Tags,
+        ROW_NUMBER() OVER (ORDER BY COUNT(c.Id) DESC, COUNT(DISTINCT v.UserId) DESC) AS Rank
+    FROM 
+        Posts p
+    LEFT JOIN 
+        Comments c ON p.Id = c.PostId
+    LEFT JOIN 
+        Votes v ON p.Id = v.PostId AND v.VoteTypeId IN (2, 3) 
+    LEFT JOIN 
+        unnest(string_to_array(p.Tags, ',')) AS tag ON TRUE
+    LEFT JOIN 
+        Tags t ON TRIM(tag) = t.TagName
+    WHERE 
+        p.PostTypeId = 1 
+    GROUP BY 
+        p.Id, p.Title, p.Body
+),
+PopularTags AS (
+    SELECT 
+        t.TagName,
+        COUNT(DISTINCT p.Id) AS PostCount
+    FROM 
+        Posts p
+    JOIN 
+        unnest(string_to_array(p.Tags, ',')) AS tag ON TRUE
+    JOIN 
+        Tags t ON TRIM(tag) = t.TagName
+    WHERE 
+        p.PostTypeId = 1 
+    GROUP BY 
+        t.TagName
+    HAVING 
+        COUNT(DISTINCT p.Id) > 10 
+),
+RecentPostHistory AS (
+    SELECT 
+        ph.PostId,
+        ARRAY_AGG(DISTINCT ph.UserDisplayName) AS Editors,
+        MAX(ph.CreationDate) AS LastEditDate
+    FROM 
+        PostHistory ph
+    GROUP BY 
+        ph.PostId
+)
+SELECT 
+    rp.PostId,
+    rp.Title,
+    rp.Body,
+    rp.CommentCount,
+    rp.VoteCount,
+    rp.Tags,
+    pt.TagName AS PopularTag,
+    rph.Editors,
+    rph.LastEditDate,
+    rp.Rank
+FROM 
+    RankedPosts rp
+LEFT JOIN 
+    PopularTags pt ON pt.TagName = ANY(rp.Tags)
+LEFT JOIN 
+    RecentPostHistory rph ON rph.PostId = rp.PostId
+WHERE 
+    rp.Rank <= 50 
+ORDER BY 
+    rp.Rank;
+","[{""Plan"": {""Node Type"": ""Sort"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 124.64, ""Total Cost"": 124.65, ""Plan Rows"": 1, ""Plan Width"": 736, ""Sort Key"": [""(row_number() OVER (?))""], ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 120.54, ""Total Cost"": 124.63, ""Plan Rows"": 1, ""Plan Width"": 736, ""Inner Unique"": false, ""Join Filter"": ""((t_1.tagname)::text = ANY (((array_agg(DISTINCT t.tagname)))::text[]))"", ""Plans"": [{""Node Type"": ""Merge Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 89.35, ""Total Cost"": 92.52, ""Plan Rows"": 1, ""Plan Width"": 648, ""Inner Unique"": true, ""Merge Cond"": ""(p.id = ph.postid)"", ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 75.53, ""Total Cost"": 75.53, ""Plan Rows"": 1, ""Plan Width"": 608, ""Sort Key"": [""p.id""], ""Plans"": [{""Node Type"": ""WindowAgg"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 75.48, ""Total Cost"": 75.51, ""Plan Rows"": 1, ""Plan Width"": 608, ""Run Condition"": ""(row_number() OVER (?) <= 50)"", ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 75.48, ""Total Cost"": 75.49, ""Plan Rows"": 1, ""Plan Width"": 600, ""Sort Key"": [""(count(c.id)) DESC"", ""(count(DISTINCT v.userid)) DESC""], ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Sorted"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 74.71, ""Total Cost"": 75.47, ""Plan Rows"": 1, ""Plan Width"": 600, ""Group Key"": [""p.id""], ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 74.71, ""Total Cost"": 74.86, ""Plan Rows"": 60, ""Plan Width"": 648, ""Sort Key"": [""p.id""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 51.84, ""Total Cost"": 72.94, ""Plan Rows"": 60, ""Plan Width"": 648, ""Inner Unique"": false, ""Hash Cond"": ""((t.tagname)::text = TRIM(BOTH FROM tag.tag))"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""tags"", ""Alias"": ""t"", ""Startup Cost"": 0.0, ""Total Cost"": 16.0, ""Plan Rows"": 600, ""Plan Width"": 88}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 51.59, ""Total Cost"": 51.59, ""Plan Rows"": 20, ""Plan Width"": 592, ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 51.09, ""Total Cost"": 51.59, ""Plan Rows"": 20, ""Plan Width"": 592, ""Inner Unique"": false, ""Plans"": [{""Node Type"": ""Merge Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 51.09, ""Total Cost"": 51.18, ""Plan Rows"": 2, ""Plan Width"": 1076, ""Inner Unique"": false, ""Merge Cond"": ""(p.id = v.postid)"", ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 21.92, ""Total Cost"": 21.93, ""Plan Rows"": 2, ""Plan Width"": 1072, ""Sort Key"": [""p.id""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 10.64, ""Total Cost"": 21.91, ""Plan Rows"": 2, ""Plan Width"": 1072, ""Inner Unique"": true, ""Hash Cond"": ""(c.postid = p.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""comments"", ""Alias"": ""c"", ""Startup Cost"": 0.0, ""Total Cost"": 11.0, ""Plan Rows"": 100, ""Plan Width"": 8}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.62, ""Total Cost"": 10.62, ""Plan Rows"": 1, ""Plan Width"": 1068, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 1, ""Plan Width"": 1068, ""Filter"": ""(posttypeid = 1)""}]}]}]}, {""Node Type"": ""Sort"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 29.17, ""Total Cost"": 29.21, ""Plan Rows"": 15, ""Plan Width"": 8, ""Sort Key"": [""v.postid""], ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""votes"", ""Alias"": ""v"", ""Startup Cost"": 0.0, ""Total Cost"": 28.88, ""Plan Rows"": 15, ""Plan Width"": 8, ""Filter"": ""(votetypeid = ANY ('{2,3}'::integer[]))""}]}]}, {""Node Type"": ""Function Scan"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Function Name"": ""unnest"", ""Alias"": ""tag"", ""Startup Cost"": 0.01, ""Total Cost"": 0.11, ""Plan Rows"": 10, ""Plan Width"": 32}]}]}]}]}]}]}]}]}, {""Node Type"": ""Aggregate"", ""Strategy"": ""Sorted"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 13.82, ""Total Cost"": 15.85, ""Plan Rows"": 90, ""Plan Width"": 44, ""Group Key"": [""ph.postid""], ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 13.82, ""Total Cost"": 14.05, ""Plan Rows"": 90, ""Plan Width"": 110, ""Sort Key"": [""ph.postid""], ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posthistory"", ""Alias"": ""ph"", ""Startup Cost"": 0.0, ""Total Cost"": 10.9, ""Plan Rows"": 90, ""Plan Width"": 110}]}]}]}, {""Node Type"": ""Aggregate"", ""Strategy"": ""Sorted"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 31.19, ""Total Cost"": 31.79, ""Plan Rows"": 10, ""Plan Width"": 96, ""Group Key"": [""t_1.tagname""], ""Filter"": ""(count(DISTINCT p_1.id) > 10)"", ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 31.19, ""Total Cost"": 31.27, ""Plan Rows"": 30, ""Plan Width"": 92, ""Sort Key"": [""t_1.tagname""], ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 0.23, ""Total Cost"": 30.46, ""Plan Rows"": 30, ""Plan Width"": 92, ""Inner Unique"": false, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p_1"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 1, ""Plan Width"": 520, ""Filter"": ""(posttypeid = 1)""}, {""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 0.23, ""Total Cost"": 19.53, ""Plan Rows"": 30, ""Plan Width"": 88, ""Inner Unique"": false, ""Hash Cond"": ""((t_1.tagname)::text = TRIM(BOTH FROM tag_1.tag))"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""tags"", ""Alias"": ""t_1"", ""Startup Cost"": 0.0, ""Total Cost"": 16.0, ""Plan Rows"": 600, ""Plan Width"": 88}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 0.11, ""Total Cost"": 0.11, ""Plan Rows"": 10, ""Plan Width"": 32, ""Plans"": [{""Node Type"": ""Function Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Function Name"": ""unnest"", ""Alias"": ""tag_1"", ""Startup Cost"": 0.01, ""Total Cost"": 0.11, ""Plan Rows"": 10, ""Plan Width"": 32}]}]}]}]}]}]}]}}]",9364.36,-0.0103656492235633
+20832.sql,"WITH RankedPosts AS (
+    SELECT 
+        p.Id AS PostId,
+        p.Title,
+        p.ViewCount,
+        p.Score,
+        p.CreationDate,
+        ROW_NUMBER() OVER (PARTITION BY p.PostTypeId ORDER BY p.ViewCount DESC, p.Score DESC) AS Rank,
+        COALESCE(p.AcceptedAnswerId, -1) AS AnswerStatus
+    FROM 
+        Posts p
+    WHERE 
+        p.CreationDate >= cast('2024-10-01' as date) - INTERVAL '1 year'
+        AND p.ViewCount IS NOT NULL
+),
+PostStatistics AS (
+    SELECT 
+        u.Id AS UserId,
+        SUM(CASE WHEN p.AnswerCount > 0 THEN 1 ELSE 0 END) AS TotalQuestionsAnswered,
+        COUNT(DISTINCT p.Id) AS TotalPosts,
+        AVG(p.Score) AS AverageScore,
+        SUM(CASE WHEN b.Class = 1 THEN 1 ELSE 0 END) AS GoldBadges,
+        SUM(CASE WHEN b.Class = 2 THEN 1 ELSE 0 END) AS SilverBadges,
+        SUM(CASE WHEN b.Class = 3 THEN 1 ELSE 0 END) AS BronzeBadges
+    FROM 
+        Users u
+    LEFT JOIN 
+        Posts p ON u.Id = p.OwnerUserId
+    LEFT JOIN 
+        Badges b ON u.Id = b.UserId
+    GROUP BY 
+        u.Id
+),
+ClosedPostReasons AS (
+    SELECT 
+        ph.PostId,
+        COUNT(*) AS CloseVoteCount,
+        STRING_AGG(CASE WHEN ph.PostHistoryTypeId = 10 THEN cr.Name END, ', ') AS CloseReasons
+    FROM 
+        PostHistory ph
+    LEFT JOIN 
+        CloseReasonTypes cr ON cr.Id::text = ph.Comment
+    GROUP BY 
+        ph.PostId
+),
+UserPostLinkages AS (
+    SELECT 
+        pl.PostId,
+        pl.RelatedPostId,
+        COUNT(pl.Id) AS LinkCount
+    FROM 
+        PostLinks pl
+    JOIN 
+        Posts p ON pl.PostId = p.Id
+    WHERE 
+        p.CreationDate < cast('2024-10-01' as date) - INTERVAL '6 months'
+    GROUP BY 
+        pl.PostId, pl.RelatedPostId
+),
+FinalStats AS (
+    SELECT 
+        ps.UserId,
+        ps.TotalQuestionsAnswered,
+        ps.TotalPosts,
+        ps.AverageScore,
+        ps.GoldBadges,
+        ps.SilverBadges,
+        ps.BronzeBadges,
+        COALESCE(rp.PostId, 0) AS TopPostId,
+        COALESCE(rp.Title, 'No Trending Post') AS TopPostTitle,
+        COALESCE(rp.ViewCount, 0) AS TopPostViewCount,
+        COALESCE(rp.Score, 0) AS TopPostScore,
+        COALESCE(cpr.CloseVoteCount, 0) AS TotalCloseVotes,
+        COALESCE(cpr.CloseReasons, 'No Close Reasons') AS CloseReasons,
+        COALESCE(pl.LinkCount, 0) AS TotalRelatedLinks
+    FROM 
+        PostStatistics ps
+    LEFT JOIN 
+        RankedPosts rp ON ps.UserId = rp.PostId
+    LEFT JOIN 
+        ClosedPostReasons cpr ON rp.PostId = cpr.PostId
+    LEFT JOIN 
+        UserPostLinkages pl ON ps.UserId = pl.PostId
+)
+SELECT 
+    *,
+    CASE 
+        WHEN TotalPosts = 0 THEN 'No activity'
+        ELSE 'Active User'
+    END AS UserActivityStatus
+FROM 
+    FinalStats
+WHERE 
+    TotalQuestionsAnswered > 5
+    AND GoldBadges > 0
+ORDER BY 
+    TotalPosts DESC,
+    AverageScore DESC;","[{""Plan"": {""Node Type"": ""Sort"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 178.3, ""Total Cost"": 178.32, ""Plan Rows"": 6, ""Plan Width"": 200, ""Sort Key"": [""(count(DISTINCT p_1.id)) DESC"", ""(avg(p_1.score)) DESC""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 161.29, ""Total Cost"": 178.22, ""Plan Rows"": 6, ""Plan Width"": 200, ""Inner Unique"": true, ""Hash Cond"": ""(rp.postid = cpr.postid)"", ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 122.22, ""Total Cost"": 139.12, ""Plan Rows"": 6, ""Plan Width"": 612, ""Inner Unique"": false, ""Join Filter"": ""(u.id = rp.postid)"", ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 122.22, ""Total Cost"": 126.75, ""Plan Rows"": 6, ""Plan Width"": 84, ""Inner Unique"": true, ""Hash Cond"": ""(pl.postid = u.id)"", ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 43.84, ""Total Cost"": 45.84, ""Plan Rows"": 200, ""Plan Width"": 16, ""Group Key"": [""pl.postid"", ""pl.relatedpostid""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 10.84, ""Total Cost"": 39.99, ""Plan Rows"": 513, ""Plan Width"": 16, ""Inner Unique"": true, ""Hash Cond"": ""(pl.postid = p.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""postlinks"", ""Alias"": ""pl"", ""Startup Cost"": 0.0, ""Total Cost"": 25.1, ""Plan Rows"": 1510, ""Plan Width"": 16}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.62, ""Total Cost"": 10.62, ""Plan Rows"": 17, ""Plan Width"": 4, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 17, ""Plan Width"": 4, ""Filter"": ""(creationdate < '2024-04-01 00:00:00'::timestamp without time zone)""}]}]}]}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 78.3, ""Total Cost"": 78.3, ""Plan Rows"": 6, ""Plan Width"": 76, ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Sorted"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 59.97, ""Total Cost"": 78.24, ""Plan Rows"": 6, ""Plan Width"": 76, ""Group Key"": [""u.id""], ""Filter"": ""((sum(CASE WHEN (p_1.answercount > 0) THEN 1 ELSE 0 END) > 5) AND (sum(CASE WHEN (b.class = 1) THEN 1 ELSE 0 END) > 0))"", ""Plans"": [{""Node Type"": ""Merge Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 59.97, ""Total Cost"": 63.89, ""Plan Rows"": 490, ""Plan Width"": 18, ""Inner Unique"": false, ""Merge Cond"": ""(u.id = b.userid)"", ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 23.18, ""Total Cost"": 23.3, ""Plan Rows"": 50, ""Plan Width"": 16, ""Sort Key"": [""u.id""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 11.12, ""Total Cost"": 21.77, ""Plan Rows"": 50, ""Plan Width"": 16, ""Inner Unique"": true, ""Hash Cond"": ""(p_1.owneruserid = u.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p_1"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 16}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.5, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 4, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 4}]}]}]}, {""Node Type"": ""Sort"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 36.79, ""Total Cost"": 38.02, ""Plan Rows"": 490, ""Plan Width"": 6, ""Sort Key"": [""b.userid""], ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""badges"", ""Alias"": ""b"", ""Startup Cost"": 0.0, ""Total Cost"": 14.9, ""Plan Rows"": 490, ""Plan Width"": 6}]}]}]}]}]}, {""Node Type"": ""Materialize"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 0.0, ""Total Cost"": 10.88, ""Plan Rows"": 17, ""Plan Width"": 528, ""Plans"": [{""Node Type"": ""Subquery Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Alias"": ""rp"", ""Startup Cost"": 0.0, ""Total Cost"": 10.79, ""Plan Rows"": 17, ""Plan Width"": 528, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Subquery"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p_2"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 17, ""Plan Width"": 550, ""Filter"": ""((viewcount IS NOT NULL) AND (creationdate >= '2023-10-01 00:00:00'::timestamp without time zone))""}]}]}]}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 37.95, ""Total Cost"": 37.95, ""Plan Rows"": 90, ""Plan Width"": 44, ""Plans"": [{""Node Type"": ""Subquery Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Alias"": ""cpr"", ""Startup Cost"": 35.92, ""Total Cost"": 37.95, ""Plan Rows"": 90, ""Plan Width"": 44, ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Subquery"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 35.92, ""Total Cost"": 37.05, ""Plan Rows"": 90, ""Plan Width"": 44, ""Group Key"": [""ph.postid""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 12.03, ""Total Cost"": 33.44, ""Plan Rows"": 248, ""Plan Width"": 124, ""Inner Unique"": false, ""Hash Cond"": ""((cr.id)::text = (ph.comment)::text)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""closereasontypes"", ""Alias"": ""cr"", ""Startup Cost"": 0.0, ""Total Cost"": 15.5, ""Plan Rows"": 550, ""Plan Width"": 120}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.9, ""Total Cost"": 10.9, ""Plan Rows"": 90, ""Plan Width"": 522, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posthistory"", ""Alias"": ""ph"", ""Startup Cost"": 0.0, ""Total Cost"": 10.9, ""Plan Rows"": 90, ""Plan Width"": 522}]}]}]}]}]}]}]}}]",41804.23,-0.0026843346450413
+12771.sql,"SELECT 
+    pt.Name AS PostType,
+    COUNT(p.Id) AS PostCount,
+    AVG(p.Score) AS AverageScore,
+    AVG(p.ViewCount) AS AverageViewCount,
+    COUNT(DISTINCT p.OwnerUserId) AS ActiveUsers
+FROM 
+    Posts p
+JOIN 
+    PostTypes pt ON p.PostTypeId = pt.Id
+GROUP BY 
+    pt.Name
+ORDER BY 
+    PostCount DESC;","[{""Plan"": {""Node Type"": ""Sort"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 33.51, ""Total Cost"": 33.63, ""Plan Rows"": 50, ""Plan Width"": 198, ""Sort Key"": [""(count(p.id)) DESC""], ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Sorted"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 30.6, ""Total Cost"": 32.1, ""Plan Rows"": 50, ""Plan Width"": 198, ""Group Key"": [""pt.name""], ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 30.6, ""Total Cost"": 30.72, ""Plan Rows"": 50, ""Plan Width"": 134, ""Sort Key"": [""pt.name""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 11.12, ""Total Cost"": 29.19, ""Plan Rows"": 50, ""Plan Width"": 134, ""Inner Unique"": false, ""Hash Cond"": ""(pt.id = p.posttypeid)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posttypes"", ""Alias"": ""pt"", ""Startup Cost"": 0.0, ""Total Cost"": 15.5, ""Plan Rows"": 550, ""Plan Width"": 120}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.5, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 18, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 18}]}]}]}]}]}}]",344.23,-0.0001970904412004
+21134.sql,"
+WITH RankedPosts AS (
+    SELECT 
+        p.Id AS PostId,
+        p.Title,
+        p.CreationDate,
+        p.Score,
+        p.ViewCount,
+        ROW_NUMBER() OVER (PARTITION BY p.PostTypeId ORDER BY p.Score DESC) AS ScoreRank,
+        COUNT(c.Id) AS CommentCount
+    FROM 
+        Posts p
+    LEFT JOIN 
+        Comments c ON p.Id = c.PostId
+    WHERE 
+        p.CreationDate >= TIMESTAMP '2024-10-01 12:34:56' - INTERVAL '1 year'
+    GROUP BY 
+        p.Id, p.Title, p.CreationDate, p.Score, p.ViewCount
+),
+PostVoteSummary AS (
+    SELECT 
+        p.Id AS PostId,
+        SUM(CASE WHEN v.VoteTypeId = 2 THEN 1 ELSE 0 END) AS UpVotes,
+        SUM(CASE WHEN v.VoteTypeId = 3 THEN 1 ELSE 0 END) AS DownVotes,
+        COALESCE(SUM(CASE WHEN v.VoteTypeId = 1 THEN 1 ELSE 0 END), 0) AS AcceptedVotes
+    FROM 
+        Posts p
+    LEFT JOIN 
+        Votes v ON p.Id = v.PostId
+    GROUP BY 
+        p.Id
+),
+UserBadgesCount AS (
+    SELECT 
+        b.UserId,
+        COUNT(b.Id) AS BadgeCount,
+        MAX(b.Class) AS MaxBadgeClass
+    FROM 
+        Badges b
+    WHERE 
+        b.Date >= TIMESTAMP '2024-10-01 12:34:56' - INTERVAL '6 months'
+    GROUP BY 
+        b.UserId
+),
+FilteredUsers AS (
+    SELECT 
+        u.Id AS UserId,
+        u.DisplayName,
+        u.Reputation,
+        COALESCE(ub.BadgeCount, 0) AS BadgeCount,
+        CASE WHEN ub.MaxBadgeClass = 1 THEN 'Gold'
+             WHEN ub.MaxBadgeClass = 2 THEN 'Silver'
+             WHEN ub.MaxBadgeClass = 3 THEN 'Bronze'
+             ELSE 'No Badge' END AS MaxBadgeCategory
+    FROM 
+        Users u
+    LEFT JOIN 
+        UserBadgesCount ub ON u.Id = ub.UserId
+    WHERE 
+        u.Reputation > 1000
+        AND u.Location IS NOT NULL
+),
+MostCommentedPosts AS (
+    SELECT 
+        rp.PostId,
+        rp.Title,
+        rp.CreationDate,
+        rp.CommentCount,
+        pv.UpVotes,
+        pv.DownVotes,
+        RANK() OVER (ORDER BY rp.CommentCount DESC) AS CommentRank
+    FROM 
+        RankedPosts rp
+    JOIN 
+        PostVoteSummary pv ON rp.PostId = pv.PostId
+    WHERE 
+        rp.CommentCount > 0
+)
+
+SELECT 
+    f.DisplayName,
+    f.Reputation,
+    f.MaxBadgeCategory,
+    mcp.Title AS MostCommentedPostTitle,
+    mcp.CommentCount AS MostComments,
+    mcp.UpVotes,
+    mcp.DownVotes
+FROM 
+    FilteredUsers f
+LEFT JOIN 
+    MostCommentedPosts mcp ON f.UserId = (
+        SELECT p.OwnerUserId 
+        FROM Posts p 
+        WHERE p.Id = mcp.PostId
+        LIMIT 1
+    )
+WHERE 
+    mcp.CommentRank <= 10
+ORDER BY 
+    f.Reputation DESC;
+","[{""Plan"": {""Node Type"": ""Sort"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 116.68, ""Total Cost"": 116.69, ""Plan Rows"": 2, ""Plan Width"": 674, ""Sort Key"": [""u.reputation DESC""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 113.65, ""Total Cost"": 116.67, ""Plan Rows"": 2, ""Plan Width"": 674, ""Inner Unique"": false, ""Hash Cond"": ""(b.userid = u.id)"", ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 16.94, ""Total Cost"": 18.2, ""Plan Rows"": 126, ""Plan Width"": 14, ""Group Key"": [""b.userid""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""badges"", ""Alias"": ""b"", ""Startup Cost"": 0.0, ""Total Cost"": 16.12, ""Plan Rows"": 163, ""Plan Width"": 6, ""Filter"": ""(date >= '2024-04-01 12:34:56'::timestamp without time zone)""}]}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 96.68, ""Total Cost"": 96.68, ""Plan Rows"": 2, ""Plan Width"": 646, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 94.05, ""Total Cost"": 96.68, ""Plan Rows"": 2, ""Plan Width"": 646, ""Inner Unique"": true, ""Hash Cond"": ""((SubPlan 1) = u.id)"", ""Plans"": [{""Node Type"": ""WindowAgg"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 83.22, ""Total Cost"": 83.32, ""Plan Rows"": 6, ""Plan Width"": 560, ""Run Condition"": ""(rank() OVER (?) <= 10)"", ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 83.22, ""Total Cost"": 83.23, ""Plan Rows"": 6, ""Plan Width"": 544, ""Sort Key"": [""rp.commentcount DESC""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 81.89, ""Total Cost"": 83.14, ""Plan Rows"": 6, ""Plan Width"": 544, ""Inner Unique"": false, ""Hash Cond"": ""(p.id = rp.postid)"", ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 59.15, ""Total Cost"": 59.65, ""Plan Rows"": 50, ""Plan Width"": 28, ""Group Key"": [""p.id""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 11.12, ""Total Cost"": 40.28, ""Plan Rows"": 1510, ""Plan Width"": 6, ""Inner Unique"": true, ""Hash Cond"": ""(v.postid = p.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""votes"", ""Alias"": ""v"", ""Startup Cost"": 0.0, ""Total Cost"": 25.1, ""Plan Rows"": 1510, ""Plan Width"": 6}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.5, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 4, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 4}]}]}]}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 22.66, ""Total Cost"": 22.66, ""Plan Rows"": 6, ""Plan Width"": 528, ""Plans"": [{""Node Type"": ""Subquery Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Alias"": ""rp"", ""Startup Cost"": 22.28, ""Total Cost"": 22.66, ""Plan Rows"": 6, ""Plan Width"": 528, ""Filter"": ""(rp.commentcount > 0)"", ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Subquery"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 22.28, ""Total Cost"": 22.45, ""Plan Rows"": 17, ""Plan Width"": 554, ""Group Key"": [""p_1.id""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 10.84, ""Total Cost"": 22.11, ""Plan Rows"": 34, ""Plan Width"": 542, ""Inner Unique"": true, ""Hash Cond"": ""(c.postid = p_1.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""comments"", ""Alias"": ""c"", ""Startup Cost"": 0.0, ""Total Cost"": 11.0, ""Plan Rows"": 100, ""Plan Width"": 8}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.62, ""Total Cost"": 10.62, ""Plan Rows"": 17, ""Plan Width"": 538, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p_1"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 17, ""Plan Width"": 538, ""Filter"": ""(creationdate >= '2023-10-01 12:34:56'::timestamp without time zone)""}]}]}]}]}]}]}]}]}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.62, ""Total Cost"": 10.62, ""Plan Rows"": 17, ""Plan Width"": 106, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 17, ""Plan Width"": 106, ""Filter"": ""((location IS NOT NULL) AND (reputation > 1000))""}]}, {""Node Type"": ""Limit"", ""Parent Relationship"": ""SubPlan"", ""Subplan Name"": ""SubPlan 1"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 0.14, ""Total Cost"": 8.16, ""Plan Rows"": 1, ""Plan Width"": 4, ""Plans"": [{""Node Type"": ""Index Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Scan Direction"": ""Forward"", ""Index Name"": ""posts_pkey"", ""Relation Name"": ""posts"", ""Alias"": ""p_2"", ""Startup Cost"": 0.14, ""Total Cost"": 8.16, ""Plan Rows"": 1, ""Plan Width"": 4, ""Index Cond"": ""(id = rp.postid)""}]}]}]}]}]}}]",1827.66,-0.0004508682151277
+4498.sql,"
+WITH UserVoteCounts AS (
+    SELECT 
+        U.Id AS UserId,
+        U.DisplayName,
+        COUNT(CASE WHEN V.VoteTypeId = 2 THEN 1 END) AS UpVoteCount,
+        COUNT(CASE WHEN V.VoteTypeId = 3 THEN 1 END) AS DownVoteCount,
+        SUM(CASE WHEN V.VoteTypeId IN (2, 3) THEN CASE WHEN V.VoteTypeId = 2 THEN 1 ELSE -1 END ELSE 0 END) AS NetVotes
+    FROM Users U
+    LEFT JOIN Votes V ON U.Id = V.UserId
+    GROUP BY U.Id, U.DisplayName
+),
+PostAnalytics AS (
+    SELECT 
+        P.Id AS PostId,
+        P.Title,
+        P.CreationDate,
+        COUNT(C) AS CommentCount,
+        SUM(CASE WHEN V.VoteTypeId = 2 THEN 1 ELSE 0 END) AS UpVotes,
+        SUM(CASE WHEN V.VoteTypeId = 3 THEN 1 ELSE 0 END) AS DownVotes,
+        SUM(CASE WHEN V.VoteTypeId = 2 THEN 1 ELSE -1 END) AS Score,
+        ROW_NUMBER() OVER (PARTITION BY P.OwnerUserId ORDER BY P.CreationDate DESC) AS UserPostRank,
+        P.OwnerUserId
+    FROM Posts P
+    LEFT JOIN Comments C ON P.Id = C.PostId
+    LEFT JOIN Votes V ON P.Id = V.PostId
+    GROUP BY P.Id, P.Title, P.CreationDate, P.OwnerUserId
+),
+FinalResults AS (
+    SELECT 
+        UA.UserId,
+        UA.DisplayName,
+        PA.PostId,
+        PA.Title,
+        PA.CreationDate,
+        PA.CommentCount,
+        PA.UpVotes,
+        PA.DownVotes,
+        PA.Score,
+        UA.NetVotes
+    FROM UserVoteCounts UA
+    JOIN PostAnalytics PA ON UA.UserId = PA.OwnerUserId
+    WHERE UA.NetVotes IS NOT NULL
+)
+
+SELECT 
+    UserId,
+    DisplayName,
+    PostId,
+    Title,
+    CreationDate,
+    CommentCount,
+    UpVotes,
+    DownVotes,
+    Score,
+    NetVotes
+FROM FinalResults
+WHERE Score > 0
+ORDER BY NetVotes DESC, CreationDate ASC
+LIMIT 10;
+","[{""Plan"": {""Node Type"": ""Limit"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 182.67, ""Total Cost"": 182.69, ""Plan Rows"": 10, ""Plan Width"": 670, ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 182.67, ""Total Cost"": 182.71, ""Plan Rows"": 17, ""Plan Width"": 670, ""Sort Key"": [""(sum(CASE WHEN (v.votetypeid = ANY ('{2,3}'::integer[])) THEN CASE WHEN (v.votetypeid = 2) THEN 1 ELSE '-1'::integer END ELSE 0 END)) DESC"", ""pa.creationdate""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 180.96, ""Total Cost"": 182.32, ""Plan Rows"": 17, ""Plan Width"": 670, ""Inner Unique"": false, ""Hash Cond"": ""(u.id = pa.owneruserid)"", ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 55.38, ""Total Cost"": 55.88, ""Plan Rows"": 50, ""Plan Width"": 126, ""Group Key"": [""u.id""], ""Filter"": ""(sum(CASE WHEN (v.votetypeid = ANY ('{2,3}'::integer[])) THEN CASE WHEN (v.votetypeid = 2) THEN 1 ELSE '-1'::integer END ELSE 0 END) IS NOT NULL)"", ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 11.12, ""Total Cost"": 40.28, ""Plan Rows"": 1510, ""Plan Width"": 104, ""Inner Unique"": true, ""Hash Cond"": ""(v.userid = u.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""votes"", ""Alias"": ""v"", ""Startup Cost"": 0.0, ""Total Cost"": 25.1, ""Plan Rows"": 1510, ""Plan Width"": 6}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.5, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 102, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 102}]}]}]}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 125.37, ""Total Cost"": 125.37, ""Plan Rows"": 17, ""Plan Width"": 564, ""Plans"": [{""Node Type"": ""Subquery Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Alias"": ""pa"", ""Startup Cost"": 124.25, ""Total Cost"": 125.37, ""Plan Rows"": 17, ""Plan Width"": 564, ""Filter"": ""(pa.score > 0)"", ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Subquery"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 124.25, ""Total Cost"": 124.75, ""Plan Rows"": 50, ""Plan Width"": 572, ""Group Key"": [""p.id""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 23.65, ""Total Cost"": 63.85, ""Plan Rows"": 3020, ""Plan Width"": 1274, ""Inner Unique"": false, ""Hash Cond"": ""(v_1.postid = p.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""votes"", ""Alias"": ""v_1"", ""Startup Cost"": 0.0, ""Total Cost"": 25.1, ""Plan Rows"": 1510, ""Plan Width"": 6}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 22.4, ""Total Cost"": 22.4, ""Plan Rows"": 100, ""Plan Width"": 1272, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 11.12, ""Total Cost"": 22.4, ""Plan Rows"": 100, ""Plan Width"": 1272, ""Inner Unique"": true, ""Hash Cond"": ""(c.postid = p.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""comments"", ""Alias"": ""c"", ""Startup Cost"": 0.0, ""Total Cost"": 11.0, ""Plan Rows"": 100, ""Plan Width"": 744}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.5, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 532, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 532}]}]}]}]}]}]}]}]}]}]}}]",2635.79,-0.0004169861311991
+17894.sql,"SELECT 
+    U.DisplayName AS UserDisplayName,
+    P.Title AS PostTitle,
+    P.CreationDate AS PostCreationDate,
+    P.Score AS PostScore,
+    COUNT(C.Id) AS CommentCount
+FROM 
+    Users U
+JOIN 
+    Posts P ON U.Id = P.OwnerUserId
+LEFT JOIN 
+    Comments C ON P.Id = C.PostId
+WHERE 
+    P.PostTypeId = 1  
+GROUP BY 
+    U.DisplayName, P.Title, P.CreationDate, P.Score
+ORDER BY 
+    P.CreationDate DESC
+LIMIT 10;","[{""Plan"": {""Node Type"": ""Limit"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 30.5, ""Total Cost"": 30.55, ""Plan Rows"": 2, ""Plan Width"": 634, ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Sorted"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 30.5, ""Total Cost"": 30.55, ""Plan Rows"": 2, ""Plan Width"": 634, ""Group Key"": [""p.creationdate"", ""u.displayname"", ""p.title"", ""p.score""], ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 30.5, ""Total Cost"": 30.51, ""Plan Rows"": 2, ""Plan Width"": 630, ""Sort Key"": [""p.creationdate DESC"", ""u.displayname"", ""p.title"", ""p.score""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 19.11, ""Total Cost"": 30.49, ""Plan Rows"": 2, ""Plan Width"": 630, ""Inner Unique"": false, ""Hash Cond"": ""(c.postid = p.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""comments"", ""Alias"": ""c"", ""Startup Cost"": 0.0, ""Total Cost"": 11.0, ""Plan Rows"": 100, ""Plan Width"": 8}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 19.1, ""Total Cost"": 19.1, ""Plan Rows"": 1, ""Plan Width"": 630, ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 0.14, ""Total Cost"": 19.1, ""Plan Rows"": 1, ""Plan Width"": 630, ""Inner Unique"": true, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 1, ""Plan Width"": 536, ""Filter"": ""(posttypeid = 1)""}, {""Node Type"": ""Index Scan"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Scan Direction"": ""Forward"", ""Index Name"": ""users_pkey"", ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.14, ""Total Cost"": 8.16, ""Plan Rows"": 1, ""Plan Width"": 102, ""Index Cond"": ""(id = p.owneruserid)""}]}]}]}]}]}]}}]",320.38,-0.0002466104100193
+14549.sql,"SELECT 
+    PH.PostId,
+    COUNT(PH.Id) AS RevisionCount,
+    MIN(PH.CreationDate) AS FirstRevisionDate,
+    MAX(PH.CreationDate) AS LastRevisionDate,
+    U.DisplayName AS LastEditedBy,
+    P.Title,
+    P.Score,
+    P.ViewCount,
+    P.AnswerCount,
+    P.CommentCount
+FROM 
+    PostHistory PH
+JOIN 
+    Posts P ON PH.PostId = P.Id
+LEFT JOIN 
+    Users U ON PH.UserId = U.Id
+GROUP BY 
+    PH.PostId, U.DisplayName, P.Title, P.Score, P.ViewCount, P.AnswerCount, P.CommentCount
+ORDER BY 
+    RevisionCount DESC
+LIMIT 10;
+","[{""Plan"": {""Node Type"": ""Limit"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 38.74, ""Total Cost"": 38.76, ""Plan Rows"": 10, ""Plan Width"": 658, ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 38.74, ""Total Cost"": 38.96, ""Plan Rows"": 90, ""Plan Width"": 658, ""Sort Key"": [""(count(ph.id)) DESC""], ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 35.89, ""Total Cost"": 36.79, ""Plan Rows"": 90, ""Plan Width"": 658, ""Group Key"": [""ph.postid"", ""u.displayname"", ""p.title"", ""p.score"", ""p.viewcount"", ""p.answercount"", ""p.commentcount""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 22.25, ""Total Cost"": 33.64, ""Plan Rows"": 90, ""Plan Width"": 646, ""Inner Unique"": true, ""Hash Cond"": ""(ph.userid = u.id)"", ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 11.12, ""Total Cost"": 22.27, ""Plan Rows"": 90, ""Plan Width"": 552, ""Inner Unique"": true, ""Hash Cond"": ""(ph.postid = p.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posthistory"", ""Alias"": ""ph"", ""Startup Cost"": 0.0, ""Total Cost"": 10.9, ""Plan Rows"": 90, ""Plan Width"": 20}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.5, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 536, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 536}]}]}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.5, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 102, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 102}]}]}]}]}]}}]",3053.45,-0.0003593334969358
+17626.sql,"
+SELECT 
+    P.Id AS PostId,
+    P.Title,
+    P.CreationDate,
+    U.DisplayName AS OwnerDisplayName,
+    P.Score,
+    P.ViewCount,
+    COUNT(C.Id) AS CommentCount
+FROM 
+    Posts P
+JOIN 
+    Users U ON P.OwnerUserId = U.Id
+LEFT JOIN 
+    Comments C ON P.Id = C.PostId
+WHERE 
+    P.PostTypeId = 1  
+GROUP BY 
+    P.Id, P.Title, P.CreationDate, U.DisplayName, P.Score, P.ViewCount
+ORDER BY 
+    P.CreationDate DESC
+LIMIT 10;
+","[{""Plan"": {""Node Type"": ""Limit"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 30.55, ""Total Cost"": 30.56, ""Plan Rows"": 2, ""Plan Width"": 642, ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 30.55, ""Total Cost"": 30.56, ""Plan Rows"": 2, ""Plan Width"": 642, ""Sort Key"": [""p.creationdate DESC""], ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Sorted"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 30.5, ""Total Cost"": 30.54, ""Plan Rows"": 2, ""Plan Width"": 642, ""Group Key"": [""p.id"", ""u.displayname""], ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 30.5, ""Total Cost"": 30.51, ""Plan Rows"": 2, ""Plan Width"": 638, ""Sort Key"": [""p.id"", ""u.displayname""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 19.11, ""Total Cost"": 30.49, ""Plan Rows"": 2, ""Plan Width"": 638, ""Inner Unique"": false, ""Hash Cond"": ""(c.postid = p.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""comments"", ""Alias"": ""c"", ""Startup Cost"": 0.0, ""Total Cost"": 11.0, ""Plan Rows"": 100, ""Plan Width"": 8}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 19.1, ""Total Cost"": 19.1, ""Plan Rows"": 1, ""Plan Width"": 634, ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 0.14, ""Total Cost"": 19.1, ""Plan Rows"": 1, ""Plan Width"": 634, ""Inner Unique"": true, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 1, ""Plan Width"": 540, ""Filter"": ""(posttypeid = 1)""}, {""Node Type"": ""Index Scan"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Scan Direction"": ""Forward"", ""Index Name"": ""users_pkey"", ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.14, ""Total Cost"": 8.16, ""Plan Rows"": 1, ""Plan Width"": 102, ""Index Cond"": ""(id = p.owneruserid)""}]}]}]}]}]}]}]}}]",965.68,-0.0002182546773866
+6625.sql,"WITH RankedPosts AS (
+    SELECT 
+        p.Id,
+        p.Title,
+        p.CreationDate,
+        p.Score,
+        p.ViewCount,
+        u.DisplayName AS OwnerDisplayName,
+        DENSE_RANK() OVER (PARTITION BY p.OwnerUserId ORDER BY p.Score DESC) AS PostRank
+    FROM 
+        Posts p
+    JOIN 
+        Users u ON p.OwnerUserId = u.Id
+    WHERE 
+        p.PostTypeId = 1 
+        AND p.CreationDate >= '2022-01-01'
+),
+MaxRank AS (
+    SELECT 
+        OwnerDisplayName,
+        MAX(PostRank) AS MaxPostRank
+    FROM 
+        RankedPosts
+    GROUP BY 
+        OwnerDisplayName
+)
+SELECT 
+    rp.Title,
+    rp.CreationDate,
+    rp.Score,
+    rp.ViewCount,
+    rp.OwnerDisplayName
+FROM 
+    RankedPosts rp
+JOIN 
+    MaxRank mr ON rp.OwnerDisplayName = mr.OwnerDisplayName
+WHERE 
+    rp.PostRank = mr.MaxPostRank
+ORDER BY 
+    rp.Score DESC, 
+    rp.ViewCount DESC;
+","[{""Plan"": {""Node Type"": ""Sort"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 19.34, ""Total Cost"": 19.35, ""Plan Rows"": 1, ""Plan Width"": 630, ""Sort Key"": [""rp.score DESC"", ""rp.viewcount DESC""], ""Plans"": [{""Node Type"": ""WindowAgg"", ""Parent Relationship"": ""InitPlan"", ""Subplan Name"": ""CTE rankedposts"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 19.23, ""Total Cost"": 19.25, ""Plan Rows"": 1, ""Plan Width"": 646, ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 19.23, ""Total Cost"": 19.24, ""Plan Rows"": 1, ""Plan Width"": 638, ""Sort Key"": [""p.owneruserid"", ""p.score DESC""], ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 0.14, ""Total Cost"": 19.22, ""Plan Rows"": 1, ""Plan Width"": 638, ""Inner Unique"": true, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.75, ""Plan Rows"": 1, ""Plan Width"": 540, ""Filter"": ""((creationdate >= '2022-01-01 00:00:00'::timestamp without time zone) AND (posttypeid = 1))""}, {""Node Type"": ""Index Scan"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Scan Direction"": ""Forward"", ""Index Name"": ""users_pkey"", ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.14, ""Total Cost"": 8.16, ""Plan Rows"": 1, ""Plan Width"": 102, ""Index Cond"": ""(id = p.owneruserid)""}]}]}]}, {""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 0.02, ""Total Cost"": 0.08, ""Plan Rows"": 1, ""Plan Width"": 630, ""Inner Unique"": true, ""Join Filter"": ""(((rp.ownerdisplayname)::text = (rankedposts.ownerdisplayname)::text) AND (rp.postrank = (max(rankedposts.postrank))))"", ""Plans"": [{""Node Type"": ""CTE Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""CTE Name"": ""rankedposts"", ""Alias"": ""rp"", ""Startup Cost"": 0.0, ""Total Cost"": 0.02, ""Plan Rows"": 1, ""Plan Width"": 638}, {""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 0.02, ""Total Cost"": 0.03, ""Plan Rows"": 1, ""Plan Width"": 106, ""Group Key"": [""rankedposts.ownerdisplayname""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""CTE Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""CTE Name"": ""rankedposts"", ""Alias"": ""rankedposts"", ""Startup Cost"": 0.0, ""Total Cost"": 0.02, ""Plan Rows"": 1, ""Plan Width"": 106}]}]}]}}]",346.59,-0.0003476292158066
+25959.sql,"
+WITH UserReputation AS (
+    SELECT 
+        U.Id AS UserId,
+        U.DisplayName,
+        U.Reputation,
+        COUNT(DISTINCT P.Id) AS QuestionsAsked,
+        COUNT(DISTINCT A.Id) AS AnswersProvided,
+        SUM(CASE WHEN V.VoteTypeId = 2 THEN 1 ELSE 0 END) AS UpvotesReceived,
+        SUM(CASE WHEN V.VoteTypeId = 3 THEN 1 ELSE 0 END) AS DownvotesReceived
+    FROM 
+        Users U
+    LEFT JOIN 
+        Posts P ON U.Id = P.OwnerUserId AND P.PostTypeId = 1
+    LEFT JOIN 
+        Posts A ON A.ParentId = P.Id AND A.PostTypeId = 2
+    LEFT JOIN 
+        Votes V ON V.UserId = U.Id AND V.PostId IN (SELECT Id FROM Posts WHERE OwnerUserId = U.Id)
+    GROUP BY 
+        U.Id, U.DisplayName, U.Reputation
+),
+TopTags AS (
+    SELECT 
+        T.TagName,
+        COUNT(P.Id) AS PostsCount,
+        SUM(CASE WHEN P.PostTypeId = 1 THEN 1 ELSE 0 END) AS QuestionsCount,
+        SUM(CASE WHEN P.PostTypeId = 2 THEN 1 ELSE 0 END) AS AnswersCount
+    FROM 
+        Tags T
+    LEFT JOIN 
+        Posts P ON P.Tags LIKE CONCAT('%', T.TagName, '%')
+    GROUP BY 
+        T.TagName
+    ORDER BY 
+        PostsCount DESC
+    LIMIT 10
+),
+UserBadgeCount AS (
+    SELECT 
+        U.Id AS UserId,
+        COUNT(B.Id) AS BadgeCount
+    FROM 
+        Users U
+    LEFT JOIN 
+        Badges B ON U.Id = B.UserId
+    GROUP BY 
+        U.Id
+)
+SELECT 
+    UR.DisplayName,
+    UR.Reputation,
+    UR.QuestionsAsked,
+    UR.AnswersProvided,
+    UR.UpvotesReceived,
+    UR.DownvotesReceived,
+    UBC.BadgeCount,
+    TT.TagName,
+    TT.PostsCount,
+    TT.QuestionsCount,
+    TT.AnswersCount
+FROM 
+    UserReputation UR
+JOIN 
+    UserBadgeCount UBC ON UR.UserId = UBC.UserId
+JOIN 
+    TopTags TT ON TT.QuestionsCount > 0
+ORDER BY 
+    UR.Reputation DESC,
+    UBC.BadgeCount DESC
+FETCH FIRST 20 ROWS ONLY;
+","[{""Plan"": {""Node Type"": ""Limit"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 741.6, ""Total Cost"": 741.65, ""Plan Rows"": 20, ""Plan Width"": 254, ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 741.6, ""Total Cost"": 741.98, ""Plan Rows"": 150, ""Plan Width"": 254, ""Sort Key"": [""u.reputation DESC"", ""ubc.badgecount DESC""], ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 717.22, ""Total Cost"": 737.61, ""Plan Rows"": 150, ""Plan Width"": 254, ""Inner Unique"": false, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 150.27, ""Total Cost"": 168.63, ""Plan Rows"": 50, ""Plan Width"": 142, ""Inner Unique"": true, ""Hash Cond"": ""(u.id = ubc.userid)"", ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Sorted"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 118.86, ""Total Cost"": 136.58, ""Plan Rows"": 50, ""Plan Width"": 138, ""Group Key"": [""u.id""], ""Plans"": [{""Node Type"": ""Merge Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 118.86, ""Total Cost"": 122.87, ""Plan Rows"": 755, ""Plan Width"": 116, ""Inner Unique"": false, ""Merge Cond"": ""(u.id = p.owneruserid)"", ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 97.59, ""Total Cost"": 99.48, ""Plan Rows"": 755, ""Plan Width"": 108, ""Sort Key"": [""u.id""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 11.12, ""Total Cost"": 61.5, ""Plan Rows"": 755, ""Plan Width"": 108, ""Inner Unique"": true, ""Hash Cond"": ""(v.userid = u.id)"", ""Join Filter"": ""(SubPlan 1)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""votes"", ""Alias"": ""v"", ""Startup Cost"": 0.0, ""Total Cost"": 25.1, ""Plan Rows"": 1510, ""Plan Width"": 10}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.5, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 106, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 106}]}, {""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""SubPlan"", ""Subplan Name"": ""SubPlan 1"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""posts"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 1, ""Plan Width"": 4, ""Filter"": ""(owneruserid = u.id)""}]}]}, {""Node Type"": ""Materialize"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 21.27, ""Total Cost"": 21.28, ""Plan Rows"": 1, ""Plan Width"": 12, ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 21.27, ""Total Cost"": 21.28, ""Plan Rows"": 1, ""Plan Width"": 12, ""Sort Key"": [""p.owneruserid""], ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 0.0, ""Total Cost"": 21.26, ""Plan Rows"": 1, ""Plan Width"": 12, ""Inner Unique"": false, ""Join Filter"": ""(a.parentid = p.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 1, ""Plan Width"": 8, ""Filter"": ""(posttypeid = 1)""}, {""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""a"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 1, ""Plan Width"": 8, ""Filter"": ""(posttypeid = 2)""}]}]}]}]}]}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 30.78, ""Total Cost"": 30.78, ""Plan Rows"": 50, ""Plan Width"": 12, ""Plans"": [{""Node Type"": ""Subquery Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Alias"": ""ubc"", ""Startup Cost"": 29.78, ""Total Cost"": 30.78, ""Plan Rows"": 50, ""Plan Width"": 12, ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Subquery"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 29.78, ""Total Cost"": 30.28, ""Plan Rows"": 50, ""Plan Width"": 12, ""Group Key"": [""u_1.id""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 11.12, ""Total Cost"": 27.33, ""Plan Rows"": 490, ""Plan Width"": 8, ""Inner Unique"": true, ""Hash Cond"": ""(b.userid = u_1.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""badges"", ""Alias"": ""b"", ""Startup Cost"": 0.0, ""Total Cost"": 14.9, ""Plan Rows"": 490, ""Plan Width"": 8}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.5, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 4, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""users"", ""Alias"": ""u_1"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 4}]}]}]}]}]}]}, {""Node Type"": ""Materialize"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 566.95, ""Total Cost"": 567.11, ""Plan Rows"": 3, ""Plan Width"": 112, ""Plans"": [{""Node Type"": ""Subquery Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Alias"": ""tt"", ""Startup Cost"": 566.95, ""Total Cost"": 567.1, ""Plan Rows"": 3, ""Plan Width"": 112, ""Filter"": ""(tt.questionscount > 0)"", ""Plans"": [{""Node Type"": ""Limit"", ""Parent Relationship"": ""Subquery"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 566.95, ""Total Cost"": 566.97, ""Plan Rows"": 10, ""Plan Width"": 112, ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 566.95, ""Total Cost"": 567.45, ""Plan Rows"": 200, ""Plan Width"": 112, ""Sort Key"": [""(count(p_1.id)) DESC""], ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 560.62, ""Total Cost"": 562.62, ""Plan Rows"": 200, ""Plan Width"": 112, ""Group Key"": [""t.tagname""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 0.0, ""Total Cost"": 551.62, ""Plan Rows"": 600, ""Plan Width"": 94, ""Inner Unique"": false, ""Join Filter"": ""((p_1.tags)::text ~~ concat('%', t.tagname, '%'))"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""tags"", ""Alias"": ""t"", ""Startup Cost"": 0.0, ""Total Cost"": 16.0, ""Plan Rows"": 600, ""Plan Width"": 88}, {""Node Type"": ""Materialize"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 0.0, ""Total Cost"": 10.75, ""Plan Rows"": 50, ""Plan Width"": 522, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p_1"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 522}]}]}]}]}]}]}]}]}]}]}}]",179040.8,-0.0071428693815016
+16141.sql,"SELECT 
+    u.DisplayName,
+    COUNT(p.Id) AS TotalPosts,
+    SUM(CASE WHEN p.PostTypeId = 1 THEN 1 ELSE 0 END) AS TotalQuestions,
+    SUM(CASE WHEN p.PostTypeId = 2 THEN 1 ELSE 0 END) AS TotalAnswers,
+    SUM(CASE WHEN p.PostTypeId IN (4, 5) THEN 1 ELSE 0 END) AS TotalTagWikis
+FROM 
+    Users u
+LEFT JOIN 
+    Posts p ON u.Id = p.OwnerUserId
+GROUP BY 
+    u.DisplayName
+ORDER BY 
+    TotalPosts DESC
+LIMIT 10;
+","[{""Plan"": {""Node Type"": ""Limit"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 24.35, ""Total Cost"": 24.37, ""Plan Rows"": 10, ""Plan Width"": 130, ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 24.35, ""Total Cost"": 24.47, ""Plan Rows"": 50, ""Plan Width"": 130, ""Sort Key"": [""(count(p.id)) DESC""], ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 22.77, ""Total Cost"": 23.27, ""Plan Rows"": 50, ""Plan Width"": 130, ""Group Key"": [""u.displayname""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 11.12, ""Total Cost"": 21.77, ""Plan Rows"": 50, ""Plan Width"": 104, ""Inner Unique"": true, ""Hash Cond"": ""(p.owneruserid = u.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 10}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.5, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 102, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 102}]}]}]}]}]}}]",1079.01,-0.0002183753400787
+23892.sql,"
+WITH RankedPosts AS (
+    SELECT 
+        p.Id AS PostId, 
+        p.Title, 
+        p.CreationDate,
+        p.PostTypeId,
+        p.AcceptedAnswerId,
+        COUNT(CASE WHEN c.Id IS NOT NULL THEN 1 END) AS CommentCount,
+        SUM(CASE WHEN v.VoteTypeId = 2 THEN 1 ELSE 0 END) AS UpVotes,
+        SUM(CASE WHEN v.VoteTypeId = 3 THEN 1 ELSE 0 END) AS DownVotes,
+        ROW_NUMBER() OVER (PARTITION BY p.PostTypeId ORDER BY COUNT(c.Id) DESC) AS RN
+    FROM 
+        Posts p
+    LEFT JOIN 
+        Comments c ON c.PostId = p.Id
+    LEFT JOIN 
+        Votes v ON v.PostId = p.Id
+    WHERE 
+        p.CreationDate >= (CAST('2024-10-01 12:34:56' AS TIMESTAMP) - INTERVAL '1 year')
+    GROUP BY 
+        p.Id, p.Title, p.CreationDate, p.PostTypeId, p.AcceptedAnswerId
+),
+
+PopularTags AS (
+    SELECT 
+        UNNEST(string_to_array(Tags, '><')) AS TagName, 
+        COUNT(*) AS TagCount
+    FROM 
+        Posts
+    WHERE 
+        PostTypeId = 1
+    GROUP BY 
+        TagName
+    HAVING 
+        COUNT(*) > 5
+),
+
+UserBadges AS (
+    SELECT 
+        u.Id AS UserId,
+        COUNT(b.Id) AS TotalBadges,
+        MAX(b.Class) AS MaxBadgeClass
+    FROM 
+        Users u
+    LEFT JOIN 
+        Badges b ON b.UserId = u.Id
+    GROUP BY 
+        u.Id
+),
+
+ClosedPosts AS (
+    SELECT 
+        p.Id AS PostId,
+        p.Title,
+        ph.CreationDate,
+        pt.Name AS PostHistoryTypeName
+    FROM 
+        Posts p
+    JOIN 
+        PostHistory ph ON p.Id = ph.PostId
+    JOIN 
+        PostHistoryTypes pt ON ph.PostHistoryTypeId = pt.Id
+    WHERE 
+        ph.PostHistoryTypeId = 10 
+        AND ph.CreationDate >= (CAST('2024-10-01 12:34:56' AS TIMESTAMP) - INTERVAL '1 month')
+)
+
+SELECT 
+    rp.PostId,
+    rp.Title,
+    rp.CreationDate,
+    rt.TagName AS PopularTag,
+    ub.UserId,
+    ub.TotalBadges,
+    ub.MaxBadgeClass,
+    cp.PostId AS ClosedPostId,
+    cp.Title AS ClosedPostTitle,
+    cp.CreationDate AS ClosedPostDate,
+    cp.PostHistoryTypeName
+FROM 
+    RankedPosts rp
+LEFT JOIN 
+    PopularTags rt ON rp.Title ILIKE '%' || rt.TagName || '%'
+LEFT JOIN 
+    UserBadges ub ON rp.AcceptedAnswerId = ub.UserId
+LEFT JOIN 
+    ClosedPosts cp ON rp.PostId = cp.PostId
+WHERE 
+    rp.RN <= 3
+    AND (rp.UpVotes - rp.DownVotes) > 10
+ORDER BY 
+    rp.CreationDate DESC, 
+    rp.UpVotes DESC NULLS LAST;
+","[{""Plan"": {""Node Type"": ""Sort"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 146.05, ""Total Cost"": 146.06, ""Plan Rows"": 6, ""Plan Width"": 1228, ""Sort Key"": [""rp.creationdate DESC"", ""rp.upvotes DESC NULLS LAST""], ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 116.38, ""Total Cost"": 145.97, ""Plan Rows"": 6, ""Plan Width"": 1228, ""Inner Unique"": false, ""Join Filter"": ""((rp.title)::text ~~* (('%'::text || rt.tagname) || '%'::text))"", ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 105.65, ""Total Cost"": 134.7, ""Plan Rows"": 6, ""Plan Width"": 1196, ""Inner Unique"": false, ""Join Filter"": ""(rp.postid = p.id)"", ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 105.36, ""Total Cost"": 106.6, ""Plan Rows"": 6, ""Plan Width"": 550, ""Inner Unique"": false, ""Hash Cond"": ""(u.id = rp.acceptedanswerid)"", ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 31.01, ""Total Cost"": 31.51, ""Plan Rows"": 50, ""Plan Width"": 14, ""Group Key"": [""u.id""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 11.12, ""Total Cost"": 27.33, ""Plan Rows"": 490, ""Plan Width"": 10, ""Inner Unique"": true, ""Hash Cond"": ""(b.userid = u.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""badges"", ""Alias"": ""b"", ""Startup Cost"": 0.0, ""Total Cost"": 14.9, ""Plan Rows"": 490, ""Plan Width"": 10}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.5, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 4, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 4}]}]}]}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 74.27, ""Total Cost"": 74.27, ""Plan Rows"": 6, ""Plan Width"": 540, ""Plans"": [{""Node Type"": ""Subquery Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Alias"": ""rp"", ""Startup Cost"": 73.68, ""Total Cost"": 74.27, ""Plan Rows"": 6, ""Plan Width"": 540, ""Filter"": ""((rp.upvotes - rp.downvotes) > 10)"", ""Plans"": [{""Node Type"": ""WindowAgg"", ""Parent Relationship"": ""Subquery"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 73.68, ""Total Cost"": 74.02, ""Plan Rows"": 17, ""Plan Width"": 574, ""Run Condition"": ""(row_number() OVER (?) <= 3)"", ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 73.68, ""Total Cost"": 73.72, ""Plan Rows"": 17, ""Plan Width"": 558, ""Sort Key"": [""p_1.posttypeid"", ""(count(c.id)) DESC""], ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 73.16, ""Total Cost"": 73.33, ""Plan Rows"": 17, ""Plan Width"": 558, ""Group Key"": [""p_1.id""], ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 22.54, ""Total Cost"": 57.76, ""Plan Rows"": 1027, ""Plan Width"": 540, ""Inner Unique"": false, ""Hash Cond"": ""(v.postid = p_1.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""votes"", ""Alias"": ""v"", ""Startup Cost"": 0.0, ""Total Cost"": 25.1, ""Plan Rows"": 1510, ""Plan Width"": 6}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 22.11, ""Total Cost"": 22.11, ""Plan Rows"": 34, ""Plan Width"": 538, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 10.84, ""Total Cost"": 22.11, ""Plan Rows"": 34, ""Plan Width"": 538, ""Inner Unique"": true, ""Hash Cond"": ""(c.postid = p_1.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""comments"", ""Alias"": ""c"", ""Startup Cost"": 0.0, ""Total Cost"": 11.0, ""Plan Rows"": 100, ""Plan Width"": 8}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.62, ""Total Cost"": 10.62, ""Plan Rows"": 17, ""Plan Width"": 534, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p_1"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 17, ""Plan Width"": 534, ""Filter"": ""(creationdate >= '2023-10-01 12:34:56'::timestamp without time zone)""}]}]}]}]}]}]}]}]}]}]}, {""Node Type"": ""Materialize"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 0.29, ""Total Cost"": 28.0, ""Plan Rows"": 1, ""Plan Width"": 646, ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 0.29, ""Total Cost"": 28.0, ""Plan Rows"": 1, ""Plan Width"": 646, ""Inner Unique"": false, ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 0.14, ""Total Cost"": 19.82, ""Plan Rows"": 1, ""Plan Width"": 530, ""Inner Unique"": true, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posthistory"", ""Alias"": ""ph"", ""Startup Cost"": 0.0, ""Total Cost"": 11.35, ""Plan Rows"": 1, ""Plan Width"": 14, ""Filter"": ""((creationdate >= '2024-09-01 12:34:56'::timestamp without time zone) AND (posthistorytypeid = 10))""}, {""Node Type"": ""Index Scan"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Scan Direction"": ""Forward"", ""Index Name"": ""posts_pkey"", ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.14, ""Total Cost"": 8.16, ""Plan Rows"": 1, ""Plan Width"": 520, ""Index Cond"": ""(id = ph.postid)""}]}, {""Node Type"": ""Index Scan"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Scan Direction"": ""Forward"", ""Index Name"": ""posthistorytypes_pkey"", ""Relation Name"": ""posthistorytypes"", ""Alias"": ""pt"", ""Startup Cost"": 0.15, ""Total Cost"": 8.17, ""Plan Rows"": 1, ""Plan Width"": 120, ""Index Cond"": ""(id = 10)""}]}]}]}, {""Node Type"": ""Materialize"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.74, ""Total Cost"": 10.92, ""Plan Rows"": 3, ""Plan Width"": 32, ""Plans"": [{""Node Type"": ""Subquery Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Alias"": ""rt"", ""Startup Cost"": 10.74, ""Total Cost"": 10.91, ""Plan Rows"": 3, ""Plan Width"": 32, ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Hashed"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Subquery"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.74, ""Total Cost"": 10.88, ""Plan Rows"": 3, ""Plan Width"": 40, ""Group Key"": [""unnest(string_to_array((posts.tags)::text, '><'::text))""], ""Filter"": ""(count(*) > 5)"", ""Planned Partitions"": 0, ""Plans"": [{""Node Type"": ""ProjectSet"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 0.0, ""Total Cost"": 10.69, ""Plan Rows"": 10, ""Plan Width"": 32, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""posts"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 1, ""Plan Width"": 516, ""Filter"": ""(posttypeid = 1)""}]}]}]}]}]}]}}]",3357.64,-0.0005294920252699
+19393.sql,"
+SELECT 
+    u.DisplayName,
+    p.Title,
+    p.CreationDate,
+    p.Score,
+    COUNT(c.Id) AS CommentCount,
+    SUM(CASE WHEN v.VoteTypeId = 2 THEN 1 ELSE 0 END) AS UpVotes,
+    SUM(CASE WHEN v.VoteTypeId = 3 THEN 1 ELSE 0 END) AS DownVotes
+FROM 
+    Posts p
+JOIN 
+    Users u ON p.OwnerUserId = u.Id
+LEFT JOIN 
+    Comments c ON p.Id = c.PostId
+LEFT JOIN 
+    Votes v ON p.Id = v.PostId
+WHERE 
+    p.PostTypeId = 1 
+GROUP BY 
+    u.DisplayName, p.Title, p.CreationDate, p.Score
+ORDER BY 
+    p.CreationDate DESC
+LIMIT 10;
+","[{""Plan"": {""Node Type"": ""Limit"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 64.39, ""Total Cost"": 64.79, ""Plan Rows"": 10, ""Plan Width"": 650, ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Sorted"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 64.39, ""Total Cost"": 66.39, ""Plan Rows"": 50, ""Plan Width"": 650, ""Group Key"": [""p.creationdate"", ""u.displayname"", ""p.title"", ""p.score""], ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 64.39, ""Total Cost"": 64.54, ""Plan Rows"": 60, ""Plan Width"": 632, ""Sort Key"": [""p.creationdate DESC"", ""u.displayname"", ""p.title"", ""p.score""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 31.36, ""Total Cost"": 62.61, ""Plan Rows"": 60, ""Plan Width"": 632, ""Inner Unique"": false, ""Hash Cond"": ""(p.id = c.postid)"", ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 19.11, ""Total Cost"": 49.95, ""Plan Rows"": 30, ""Plan Width"": 632, ""Inner Unique"": false, ""Hash Cond"": ""(v.postid = p.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""votes"", ""Alias"": ""v"", ""Startup Cost"": 0.0, ""Total Cost"": 25.1, ""Plan Rows"": 1510, ""Plan Width"": 6}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 19.1, ""Total Cost"": 19.1, ""Plan Rows"": 1, ""Plan Width"": 630, ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 0.14, ""Total Cost"": 19.1, ""Plan Rows"": 1, ""Plan Width"": 630, ""Inner Unique"": true, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 1, ""Plan Width"": 536, ""Filter"": ""(posttypeid = 1)""}, {""Node Type"": ""Index Scan"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Scan Direction"": ""Forward"", ""Index Name"": ""users_pkey"", ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.14, ""Total Cost"": 8.16, ""Plan Rows"": 1, ""Plan Width"": 102, ""Index Cond"": ""(id = p.owneruserid)""}]}]}]}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 11.0, ""Total Cost"": 11.0, ""Plan Rows"": 100, ""Plan Width"": 8, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""comments"", ""Alias"": ""c"", ""Startup Cost"": 0.0, ""Total Cost"": 11.0, ""Plan Rows"": 100, ""Plan Width"": 8}]}]}]}]}]}}]",2048.4,-0.0003063384425858
+19417.sql,"SELECT 
+    p.Id AS PostId,
+    p.Title,
+    u.DisplayName AS Author,
+    p.CreationDate,
+    p.Score,
+    p.ViewCount
+FROM 
+    Posts p
+JOIN 
+    Users u ON p.OwnerUserId = u.Id
+WHERE 
+    p.PostTypeId = 1  
+ORDER BY 
+    p.CreationDate DESC
+LIMIT 10;","[{""Plan"": {""Node Type"": ""Limit"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 19.11, ""Total Cost"": 19.11, ""Plan Rows"": 1, ""Plan Width"": 634, ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 19.11, ""Total Cost"": 19.11, ""Plan Rows"": 1, ""Plan Width"": 634, ""Sort Key"": [""p.creationdate DESC""], ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 0.14, ""Total Cost"": 19.1, ""Plan Rows"": 1, ""Plan Width"": 634, ""Inner Unique"": true, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.62, ""Plan Rows"": 1, ""Plan Width"": 540, ""Filter"": ""(posttypeid = 1)""}, {""Node Type"": ""Index Scan"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Scan Direction"": ""Forward"", ""Index Name"": ""users_pkey"", ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.14, ""Total Cost"": 8.16, ""Plan Rows"": 1, ""Plan Width"": 102, ""Index Cond"": ""(id = p.owneruserid)""}]}]}]}}]",142.39,-0.0001390275537842
+11238.sql,"
+WITH UserActivity AS (
+    SELECT 
+        U.Id AS UserId,
+        U.DisplayName,
+        COUNT(DISTINCT P.Id) AS TotalPosts,
+        SUM(CASE WHEN P.PostTypeId = 1 THEN 1 ELSE 0 END) AS TotalQuestions,
+        SUM(CASE WHEN P.PostTypeId = 2 THEN 1 ELSE 0 END) AS TotalAnswers,
+        COUNT(C) AS TotalComments,
+        SUM(CASE WHEN V.CreationDate IS NOT NULL THEN 1 ELSE 0 END) AS TotalVotes,
+        SUM(CASE WHEN B.Id IS NOT NULL THEN 1 ELSE 0 END) AS TotalBadges
+    FROM 
+        Users U
+    LEFT JOIN 
+        Posts P ON U.Id = P.OwnerUserId
+    LEFT JOIN 
+        Comments C ON P.Id = C.PostId
+    LEFT JOIN 
+        Votes V ON P.Id = V.PostId
+    LEFT JOIN 
+        Badges B ON U.Id = B.UserId
+    GROUP BY 
+        U.Id, U.DisplayName
+)
+
+SELECT 
+    UA.UserId,
+    UA.DisplayName,
+    UA.TotalPosts,
+    UA.TotalQuestions,
+    UA.TotalAnswers,
+    UA.TotalComments,
+    UA.TotalVotes,
+    UA.TotalBadges,
+    COALESCE(RANK() OVER (ORDER BY UA.TotalPosts DESC), 0) AS UserRank
+FROM 
+    UserActivity UA
+ORDER BY 
+    UA.TotalPosts DESC
+FETCH FIRST 100 ROWS ONLY;
+","[{""Plan"": {""Node Type"": ""Limit"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 223.34, ""Total Cost"": 224.22, ""Plan Rows"": 50, ""Plan Width"": 158, ""Plans"": [{""Node Type"": ""WindowAgg"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 223.34, ""Total Cost"": 224.22, ""Plan Rows"": 50, ""Plan Width"": 158, ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 223.34, ""Total Cost"": 223.47, ""Plan Rows"": 50, ""Plan Width"": 150, ""Sort Key"": [""ua.totalposts DESC""], ""Plans"": [{""Node Type"": ""Subquery Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Alias"": ""ua"", ""Startup Cost"": 121.81, ""Total Cost"": 221.93, ""Plan Rows"": 50, ""Plan Width"": 150, ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Sorted"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Subquery"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 121.81, ""Total Cost"": 221.43, ""Plan Rows"": 50, ""Plan Width"": 150, ""Group Key"": [""u.id""], ""Plans"": [{""Node Type"": ""Merge Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 121.81, ""Total Cost"": 137.59, ""Plan Rows"": 3704, ""Plan Width"": 860, ""Inner Unique"": false, ""Merge Cond"": ""(u.id = b.userid)"", ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 85.02, ""Total Cost"": 85.96, ""Plan Rows"": 378, ""Plan Width"": 856, ""Sort Key"": [""u.id""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 34.29, ""Total Cost"": 68.83, ""Plan Rows"": 378, ""Plan Width"": 856, ""Inner Unique"": false, ""Hash Cond"": ""(v.postid = p.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""votes"", ""Alias"": ""v"", ""Startup Cost"": 0.0, ""Total Cost"": 25.1, ""Plan Rows"": 1510, ""Plan Width"": 12}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 33.67, ""Total Cost"": 33.67, ""Plan Rows"": 50, ""Plan Width"": 848, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 22.25, ""Total Cost"": 33.67, ""Plan Rows"": 50, ""Plan Width"": 848, ""Inner Unique"": true, ""Hash Cond"": ""(p.owneruserid = u.id)"", ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 11.12, ""Total Cost"": 22.4, ""Plan Rows"": 50, ""Plan Width"": 750, ""Inner Unique"": true, ""Hash Cond"": ""(c.postid = p.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""comments"", ""Alias"": ""c"", ""Startup Cost"": 0.0, ""Total Cost"": 11.0, ""Plan Rows"": 100, ""Plan Width"": 744}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.5, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 10, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 10}]}]}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.5, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 102, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 102}]}]}]}]}]}, {""Node Type"": ""Sort"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 36.79, ""Total Cost"": 38.02, ""Plan Rows"": 490, ""Plan Width"": 8, ""Sort Key"": [""b.userid""], ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""badges"", ""Alias"": ""b"", ""Startup Cost"": 0.0, ""Total Cost"": 14.9, ""Plan Rows"": 490, ""Plan Width"": 8}]}]}]}]}]}]}]}}]",121176.23,-0.0036076696971745
+24521.sql,"
+WITH RankedPosts AS (
+    SELECT 
+        p.Id AS PostId,
+        p.Title,
+        p.CreationDate,
+        p.Score,
+        p.ViewCount,
+        ROW_NUMBER() OVER (PARTITION BY pt.Name ORDER BY p.CreationDate DESC) AS Rank,
+        COALESCE(NULLIF(u.Location, ''), 'Unknown Location') AS UserLocation
+    FROM 
+        Posts p
+    JOIN 
+        PostTypes pt ON p.PostTypeId = pt.Id
+    LEFT JOIN 
+        Users u ON p.OwnerUserId = u.Id
+    WHERE 
+        p.CreationDate >= CURRENT_DATE - INTERVAL '1 year'
+        AND p.Score > (SELECT AVG(Score) FROM Posts)  
+),
+PostComments AS (
+    SELECT 
+        c.PostId,
+        COUNT(*) AS CommentCount,
+        STRING_AGG(c.Text, '; ' ORDER BY c.CreationDate) AS CommentsSummary
+    FROM 
+        Comments c
+    GROUP BY 
+        c.PostId
+),
+UserBadges AS (
+    SELECT 
+        b.UserId,
+        COUNT(*) AS BadgeCount,
+        STRING_AGG(b.Name, ', ') AS Badges 
+    FROM 
+        Badges b
+    WHERE 
+        b.Class = 1  
+    GROUP BY 
+        b.UserId
+)
+SELECT 
+    rp.PostId,
+    rp.Title,
+    rp.CreationDate,
+    rp.Score,
+    rp.ViewCount,
+    COALESCE(pc.CommentCount, 0) AS NumberOfComments,
+    COALESCE(pc.CommentsSummary, 'No comments') AS CommentSnippet,
+    ub.BadgeCount,
+    ub.Badges,
+    rp.UserLocation
+FROM 
+    RankedPosts rp
+LEFT JOIN 
+    PostComments pc ON rp.PostId = pc.PostId
+LEFT JOIN 
+    UserBadges ub ON rp.UserLocation IS NOT NULL AND rp.UserLocation <> 'Unknown Location' 
+                  AND EXISTS (SELECT 1 FROM Users u WHERE u.Id = ub.UserId AND COALESCE(u.Location, '') = rp.UserLocation)
+WHERE 
+    (rp.Rank <= 5 OR ub.BadgeCount > 0)  
+ORDER BY 
+    rp.Score DESC, rp.CreationDate ASC
+OFFSET 10 ROWS FETCH NEXT 10 ROWS ONLY;
+","[{""Plan"": {""Node Type"": ""Limit"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 182.94, ""Total Cost"": 182.94, ""Plan Rows"": 1, ""Plan Width"": 648, ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 182.93, ""Total Cost"": 182.94, ""Plan Rows"": 3, ""Plan Width"": 648, ""Sort Key"": [""rp.score DESC"", ""rp.creationdate""], ""Plans"": [{""Node Type"": ""Nested Loop"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 81.09, ""Total Cost"": 182.91, ""Plan Rows"": 3, ""Plan Width"": 648, ""Inner Unique"": false, ""Join Filter"": ""((rp.userlocation IS NOT NULL) AND (rp.userlocation <> 'Unknown Location'::text) AND (hashed SubPlan 2))"", ""Filter"": ""((rp.rank <= 5) OR (ub.badgecount > 0))"", ""Plans"": [{""Node Type"": ""Merge Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 64.95, ""Total Cost"": 68.54, ""Plan Rows"": 6, ""Plan Width"": 616, ""Inner Unique"": true, ""Merge Cond"": ""(rp.postid = c.postid)"", ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 50.63, ""Total Cost"": 50.65, ""Plan Rows"": 6, ""Plan Width"": 576, ""Sort Key"": [""rp.postid""], ""Plans"": [{""Node Type"": ""Subquery Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Alias"": ""rp"", ""Startup Cost"": 50.36, ""Total Cost"": 50.56, ""Plan Rows"": 6, ""Plan Width"": 576, ""Plans"": [{""Node Type"": ""WindowAgg"", ""Parent Relationship"": ""Subquery"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 50.36, ""Total Cost"": 50.5, ""Plan Rows"": 6, ""Plan Width"": 694, ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Plain"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""InitPlan"", ""Subplan Name"": ""InitPlan 3 (returns $4)"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.63, ""Total Cost"": 10.64, ""Plan Rows"": 1, ""Plan Width"": 32, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""posts"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 4}]}, {""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 39.72, ""Total Cost"": 39.74, ""Plan Rows"": 6, ""Plan Width"": 1170, ""Sort Key"": [""pt.name"", ""p.creationdate DESC""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Inner"", ""Startup Cost"": 22.02, ""Total Cost"": 39.64, ""Plan Rows"": 6, ""Plan Width"": 1170, ""Inner Unique"": false, ""Hash Cond"": ""(pt.id = p.posttypeid)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posttypes"", ""Alias"": ""pt"", ""Startup Cost"": 0.0, ""Total Cost"": 15.5, ""Plan Rows"": 550, ""Plan Width"": 120}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 21.95, ""Total Cost"": 21.95, ""Plan Rows"": 6, ""Plan Width"": 1054, ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 11.2, ""Total Cost"": 21.95, ""Plan Rows"": 6, ""Plan Width"": 1054, ""Inner Unique"": false, ""Hash Cond"": ""(u.id = p.owneruserid)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 520}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 11.12, ""Total Cost"": 11.12, ""Plan Rows"": 6, ""Plan Width"": 542, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 11.12, ""Plan Rows"": 6, ""Plan Width"": 542, ""Filter"": ""(((score)::numeric > $4) AND (creationdate >= (CURRENT_DATE - '1 year'::interval)))""}]}]}]}]}]}]}]}]}, {""Node Type"": ""Aggregate"", ""Strategy"": ""Sorted"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 14.32, ""Total Cost"": 16.57, ""Plan Rows"": 100, ""Plan Width"": 44, ""Group Key"": [""c.postid""], ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 14.32, ""Total Cost"": 14.57, ""Plan Rows"": 100, ""Plan Width"": 528, ""Sort Key"": [""c.postid""], ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""comments"", ""Alias"": ""c"", ""Startup Cost"": 0.0, ""Total Cost"": 11.0, ""Plan Rows"": 100, ""Plan Width"": 528}]}]}]}, {""Node Type"": ""Materialize"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 16.14, ""Total Cost"": 16.21, ""Plan Rows"": 2, ""Plan Width"": 44, ""Plans"": [{""Node Type"": ""Subquery Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Alias"": ""ub"", ""Startup Cost"": 16.14, ""Total Cost"": 16.2, ""Plan Rows"": 2, ""Plan Width"": 44, ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Sorted"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Subquery"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 16.14, ""Total Cost"": 16.18, ""Plan Rows"": 2, ""Plan Width"": 44, ""Group Key"": [""b.userid""], ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 16.14, ""Total Cost"": 16.14, ""Plan Rows"": 2, ""Plan Width"": 122, ""Sort Key"": [""b.userid""], ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""badges"", ""Alias"": ""b"", ""Startup Cost"": 0.0, ""Total Cost"": 16.12, ""Plan Rows"": 2, ""Plan Width"": 122, ""Filter"": ""(class = 1)""}]}]}]}]}, {""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""SubPlan"", ""Subplan Name"": ""SubPlan 2"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""users"", ""Alias"": ""u_1"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 36}]}]}]}}]",214.93,-0.0016396370572406
+6102.sql,"
+WITH UserStats AS (
+    SELECT 
+        U.Id AS UserId,
+        U.DisplayName,
+        U.Reputation,
+        COUNT(DISTINCT P.Id) AS PostCount,
+        SUM(CASE WHEN P.PostTypeId = 1 THEN 1 ELSE 0 END) AS QuestionCount,
+        SUM(CASE WHEN P.PostTypeId = 2 THEN 1 ELSE 0 END) AS AnswerCount,
+        SUM(CASE WHEN V.VoteTypeId = 2 THEN 1 ELSE 0 END) AS UpVotes,
+        SUM(CASE WHEN V.VoteTypeId = 3 THEN 1 ELSE 0 END) AS DownVotes,
+        COUNT(B.Id) AS BadgeCount
+    FROM Users U
+    LEFT JOIN Posts P ON U.Id = P.OwnerUserId
+    LEFT JOIN Votes V ON P.Id = V.PostId
+    LEFT JOIN Badges B ON U.Id = B.UserId
+    GROUP BY U.Id, U.DisplayName, U.Reputation
+),
+TopUsers AS (
+    SELECT 
+        UserId,
+        DisplayName,
+        Reputation,
+        PostCount,
+        QuestionCount,
+        AnswerCount,
+        UpVotes,
+        DownVotes,
+        BadgeCount,
+        RANK() OVER (ORDER BY Reputation DESC) AS ReputationRank
+    FROM UserStats
+)
+SELECT 
+    UserId,
+    DisplayName,
+    Reputation,
+    PostCount,
+    QuestionCount,
+    AnswerCount,
+    UpVotes,
+    DownVotes,
+    BadgeCount,
+    ReputationRank
+FROM TopUsers
+WHERE ReputationRank <= 10
+ORDER BY Reputation DESC;
+","[{""Plan"": {""Node Type"": ""WindowAgg"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 225.51, ""Total Cost"": 226.39, ""Plan Rows"": 50, ""Plan Width"": 162, ""Run Condition"": ""(rank() OVER (?) <= 10)"", ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 225.51, ""Total Cost"": 225.64, ""Plan Rows"": 50, ""Plan Width"": 154, ""Sort Key"": [""userstats.reputation DESC""], ""Plans"": [{""Node Type"": ""Subquery Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Alias"": ""userstats"", ""Startup Cost"": 105.46, ""Total Cost"": 224.1, ""Plan Rows"": 50, ""Plan Width"": 154, ""Plans"": [{""Node Type"": ""Aggregate"", ""Strategy"": ""Sorted"", ""Partial Mode"": ""Simple"", ""Parent Relationship"": ""Subquery"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 105.46, ""Total Cost"": 223.6, ""Plan Rows"": 50, ""Plan Width"": 154, ""Group Key"": [""u.id""], ""Plans"": [{""Node Type"": ""Merge Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Left"", ""Startup Cost"": 105.46, ""Total Cost"": 121.24, ""Plan Rows"": 3704, ""Plan Width"": 118, ""Inner Unique"": false, ""Merge Cond"": ""(u.id = b.userid)"", ""Plans"": [{""Node Type"": ""Sort"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 68.67, ""Total Cost"": 69.61, ""Plan Rows"": 378, ""Plan Width"": 114, ""Sort Key"": [""u.id""], ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 22.25, ""Total Cost"": 52.48, ""Plan Rows"": 378, ""Plan Width"": 114, ""Inner Unique"": true, ""Hash Cond"": ""(p.owneruserid = u.id)"", ""Plans"": [{""Node Type"": ""Hash Join"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Join Type"": ""Right"", ""Startup Cost"": 11.12, ""Total Cost"": 40.28, ""Plan Rows"": 378, ""Plan Width"": 12, ""Inner Unique"": true, ""Hash Cond"": ""(v.postid = p.id)"", ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""votes"", ""Alias"": ""v"", ""Startup Cost"": 0.0, ""Total Cost"": 25.1, ""Plan Rows"": 1510, ""Plan Width"": 6}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.5, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 10, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""posts"", ""Alias"": ""p"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 10}]}]}, {""Node Type"": ""Hash"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 10.5, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 106, ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""users"", ""Alias"": ""u"", ""Startup Cost"": 0.0, ""Total Cost"": 10.5, ""Plan Rows"": 50, ""Plan Width"": 106}]}]}]}, {""Node Type"": ""Sort"", ""Parent Relationship"": ""Inner"", ""Parallel Aware"": false, ""Async Capable"": false, ""Startup Cost"": 36.79, ""Total Cost"": 38.02, ""Plan Rows"": 490, ""Plan Width"": 8, ""Sort Key"": [""b.userid""], ""Plans"": [{""Node Type"": ""Seq Scan"", ""Parent Relationship"": ""Outer"", ""Parallel Aware"": false, ""Async Capable"": false, ""Relation Name"": ""badges"", ""Alias"": ""b"", ""Startup Cost"": 0.0, ""Total Cost"": 14.9, ""Plan Rows"": 490, ""Plan Width"": 8}]}]}]}]}]}]}}]",59579.6,-0.0017787852737169

@@ -32,14 +32,22 @@ def load_llm_model(model_name):
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    login(new_session=False)
+    token = os.environ.get("HF_TOKEN")
+    if token:
+        login(token=token)
     print(f"Loading model {model_name}...")
+    print("  Step 1/3: Downloading/loading tokenizer (may take a moment on first run)...")
+    sys.stdout.flush()
     tokenizer = AutoTokenizer.from_pretrained(model_name)
+    print("  Step 2/3: Downloading/loading model weights (may be several GB on first run)...")
+    sys.stdout.flush()
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
         device_map="auto",
     )
+    print("  Step 3/3: Model loaded successfully.")
+    sys.stdout.flush()
     return model, tokenizer
 
 
@@ -159,10 +167,15 @@ def generate_plans_for_df(df, query_column, model_name):
     model, tokenizer = load_llm_model(model_name)
 
     plans = []
-    print(f"Generating query plans for {len(df)} queries...")
-    for _, row in tqdm(df.iterrows(), total=len(df)):
+    total = len(df)
+    print(f"Generating query plans for {total} queries...")
+    sys.stdout.flush()
+    for i, (_, row) in enumerate(tqdm(df.iterrows(), total=total), start=1):
         plan = generate_query_plan(row[query_column], model, tokenizer)
         plans.append(plan)
+        if i % 10 == 0 or i == total:
+            print(f"Generated {i}/{total} plans")
+            sys.stdout.flush()
 
     df = df.copy()
     df["plan_json"] = plans

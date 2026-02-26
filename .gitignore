@@ -36,3 +36,10 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Streamlit frontend temp uploads
+temp_uploads/
+
+.env
+.env
+.env
