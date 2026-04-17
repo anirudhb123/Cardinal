@@ -8,10 +8,14 @@ Build a small Cardinal-compatible dataset from SQLStorm.
 4. Compute rewards and save as Parquet
 """
 
+import os
 import pandas as pd
 import json
 from pathlib import Path
 from tqdm import tqdm
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 # Optional PostgreSQL import
 try:
@@ -24,8 +28,8 @@ except ImportError:
 # === CONFIG ===
 DATASET = "stackoverflow"       # dataset to use
 VERSION = "v1.0"
-DB_NAME = "stackoverflow"        # PostgreSQL DB name
-DB_USER = "aeshon"     # PostgreSQL username
+DB_NAME = os.getenv("POSTGRES_DB", "stackoverflow")
+DB_USER = os.getenv("POSTGRES_USER", "cardinal-2026")
 
 # Subset parameters
 SUBSET_SIZE = 3000               # number of queries to sample
@@ -108,7 +112,13 @@ print(f"✅ Selected {len(subset_df)} queries for plan extraction")
 if HAS_PSYCOPG2:
     print("🔹 Generating query plans from PostgreSQL...")
     try:
-        conn = psycopg2.connect(f"dbname={DB_NAME} user={DB_USER}")
+        conn = psycopg2.connect(
+            host=os.getenv("POSTGRES_HOST", "localhost"),
+            port=int(os.getenv("POSTGRES_PORT", "5432")),
+            dbname=DB_NAME,
+            user=DB_USER,
+            password=os.getenv("POSTGRES_PASSWORD", ""),
+        )
         cur = conn.cursor()
 
         plans = {}
