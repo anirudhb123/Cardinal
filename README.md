@@ -1,12 +1,8 @@
 # Cardinal
 
-**Cardinal** is a research project for **learning and evaluating language models on PostgreSQL query optimization**. This repository implements the full pipeline: Hugging Face models talk to a live database—generating execution plans (and optional `pg_hint_plan`–style hints), running queries on PostgreSQL, and recording latency, CPU time, and memory. It also includes **supervised fine-tuning (SFT)** and **GRPO reinforcement learning** so models can be trained to improve those metrics on real workloads.
-
-### Project poster (group 37)
-
-Overview of motivation, execution-grounded data, SFT → GRPO pipeline, Streamlit evaluation UI, and tech stack:
-
 ![Cardinal project poster: motivation, main features, architecture workflow, Streamlit dashboards, and stack](docs/cardinal-poster.png)
+
+**Cardinal** is a research project for **learning and evaluating language models on PostgreSQL query optimization**. This repository implements the full pipeline: Hugging Face models talk to a live database—generating execution plans (and optional `pg_hint_plan`–style hints), running queries on PostgreSQL, and recording latency, CPU time, and memory. It also includes **supervised fine-tuning (SFT)** and **GRPO reinforcement learning** so models can be trained to improve those metrics on real workloads.
 
 The Stack Overflow–style **SQLStorm** benchmark artifacts and Cardinal-style dataset export are part of the tooling; naming like `sqlstorm_data.zip` and `convert_to_cardinal.py` reflects that split.
 
