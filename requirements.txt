@@ -24,6 +24,10 @@ bitsandbytes>=0.41.0
 tensorboard
 trl>=0.15.0
 
+# Resolve conflicts with google-auth and tensorflow-macos
+cachetools>=2.0.0,<6.0
+protobuf>=3.20.3,<5.0.0
+
 # Flash Attention (optional, requires CUDA and specific PyTorch version)
 # Install separately: pip install flash-attn --no-build-isolation
 # Note: flash-attn requires CUDA-enabled PyTorch and may need specific versions
