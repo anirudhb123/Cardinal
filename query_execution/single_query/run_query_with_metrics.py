@@ -61,6 +61,11 @@ def _worker_run_query(query: str, hints: Optional[str], db_config: Dict[str, Any
     return out
 
 
+def _mp_put_result(q, query: str, hints: Optional[str], db_config: Dict[str, Any]) -> None:
+    """Module-level target for multiprocessing.Process (nested lambdas/closures are not picklable)."""
+    q.put(_worker_run_query(query, hints, db_config))
+
+
 def run_query_with_metrics(
     query: str,
     hints: Optional[str] = None,
@@ -109,10 +114,7 @@ def run_query_with_metrics(
         return _worker_run_query(query, hints, cfg)
 
     q = Queue()
-    def target():
-        q.put(_worker_run_query(query, hints, db_config))
-
-    p = Process(target=target)
+    p = Process(target=_mp_put_result, args=(q, query, hints, db_config))
     p.start()
     p.join(timeout=timeout_s or 60.0)
     if p.is_alive():

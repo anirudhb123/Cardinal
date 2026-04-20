@@ -82,52 +82,131 @@ def _parse_hints_from_completion(completion: str) -> str:
     """Extract pg_hint_plan hint string from model completion (e.g. /*+ ... */)."""
     if not completion or not isinstance(completion, str):
         return ""
-    completion = completion.strip()
-    m = re.search(r"/\*\+\s*.*?\s*\*/", completion, re.DOTALL)
+    text = completion.strip()
+    text = re.sub(r"^```(?:sql|text)?\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*```\s*$", "", text)
+    text = text.strip()
+    for prefix in ("hints:", "hint:", "output:", "pg_hint_plan:", "[output]"):
+        if text.lower().startswith(prefix):
+            text = text[len(prefix) :].strip()
+    # Non-greedy match for first /*+ ... */ block
+    m = re.search(r"/\*\+[\s\S]*?\*/", text)
     if m:
         return m.group(0).strip()
-    if completion.startswith("/*+") and "*/" in completion:
-        return completion.split("*/")[0] + "*/"
+    if text.startswith("/*+") and "*/" in text:
+        return text.split("*/", 1)[0] + "*/"
     return ""
+
+
+# Lines that often start model hallucinations *after* a plan (strip before JSON parse).
+_PLAN_MODE_JUNK_START = re.compile(
+    r"(?is)"
+    r"(?:\n\s*\[QUERY STATS\])"
+    r"|(?:\n\s*\[QUERY PLAN\])"
+    r"|(?:\n\s*\[PLAN VARYING)"
+    r"|(?:\n\s*\[STATS\])"
+    r"|(?:\n\s*Bullet Points)"
+    r"|(?:\n\s*##\s)"
+    r"|(?:\n\s*<div\b)"
+    r"|(?:\n\s*\*\s*Execution Plan)"
+)
+
+
+def _strip_plan_mode_junk_suffix(text: str) -> str:
+    """Remove trailing non-JSON prose that the model often appends after EXPLAIN JSON."""
+    m = _PLAN_MODE_JUNK_START.search(text)
+    if m:
+        return text[: m.start()].strip()
+    return text
+
+
+def _extract_first_json_value_string_aware(s: str):
+    """
+    Parse the first complete JSON object or array from s, using bracket depth outside
+    of double-quoted strings. Stops at balanced depth 0 so trailing hallucinated text
+    (e.g. '[QUERY STATS]...') is ignored when the leading JSON is well-formed.
+    Returns parsed value or None.
+    """
+    start = s.find("[")
+    if start < 0:
+        start = s.find("{")
+    if start < 0:
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(s)):
+        ch = s[i]
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+            continue
+        if ch in "[{":
+            depth += 1
+        elif ch in "]}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(s[start : i + 1])
+                except json.JSONDecodeError:
+                    return None
+    return None
 
 
 def _parse_plan_from_completion(completion: str):
     """
     Extract execution plan JSON from completion (text after [PLAN] or raw JSON).
     Returns parsed plan (dict/list) or None. Compatible with EXPLAIN (FORMAT JSON) shape.
+
+    Common failure modes we try to mitigate:
+    - Leading prose or markdown fences before the JSON array/object.
+    - json.loads on the whole string failing while a valid JSON value is embedded.
+    - Model appends fake 'stats', second plans, markdown, HTML after a valid top-level
+      JSON array (handled by string-aware bracket parse + optional suffix strip).
+    Truncation mid-JSON (max_new_tokens) or malformed JSON inside the plan cannot be recovered.
     """
     if not completion or not isinstance(completion, str):
         return None
     text = completion.strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*```\s*$", "", text)
+    text = text.strip()
     if "[PLAN]" in text.upper():
         idx = text.upper().rfind("[PLAN]")
         text = text[idx + 6:].strip()
     if not text:
         return None
-    try:
-        plan = json.loads(text)
-    except json.JSONDecodeError:
-        i = text.find("{")
-        if i == -1:
-            i = text.find("[")
-        if i >= 0:
-            depth = 0
-            for j in range(i, len(text)):
-                if text[j] in "{[":
-                    depth += 1
-                elif text[j] in "}]":
-                    depth -= 1
-                    if depth == 0:
-                        try:
-                            plan = json.loads(text[i : j + 1])
-                            break
-                        except json.JSONDecodeError:
-                            return None
-                        break
-            else:
-                return None
-        else:
+
+    text = _strip_plan_mode_junk_suffix(text)
+
+    decoder = json.JSONDecoder()
+
+    def _first_json_value(s: str):
+        for i, c in enumerate(s):
+            if c not in "[{":
+                continue
+            try:
+                return decoder.raw_decode(s, i)[0]
+            except json.JSONDecodeError:
+                continue
+        return None
+
+    plan = _extract_first_json_value_string_aware(text)
+    if plan is None:
+        plan = _first_json_value(text)
+    if plan is None:
+        try:
+            plan = json.loads(text)
+        except json.JSONDecodeError:
             return None
+
     if isinstance(plan, list) and len(plan) > 0 and isinstance(plan[0], dict):
         return plan
     if isinstance(plan, dict) and ("Plan" in plan or "Node Type" in plan):
@@ -143,6 +222,42 @@ def _plan_json_to_hints(plan_json) -> str:
         return plan_to_hints(plan_json) or ""
     except Exception:
         return ""
+
+
+def _completion_for_reward_log(completion: str) -> str:
+    """
+    Text to print when logging a failed parse. By default logs the **entire** completion
+    (set GRPO_COMPLETION_LOG_CHARS to a positive int to cap, e.g. 2000).
+    """
+    raw = os.environ.get("GRPO_COMPLETION_LOG_CHARS", "full").strip().lower()
+    if raw in ("", "full", "0", "-1", "none"):
+        return completion
+    cap = int(raw)
+    if cap <= 0:
+        return completion
+    if len(completion) <= cap:
+        return completion
+    return (
+        completion[:cap]
+        + f"\n… [log truncated: {len(completion)} chars total, GRPO_COMPLETION_LOG_CHARS={cap}]"
+    )
+
+
+def _hints_from_plan_completion(completion: str) -> tuple[str, str | None]:
+    """
+    Parse completion to pg_hint_plan hints. Returns (hints, reason_if_empty).
+    reason_if_empty: None when hints non-empty; else 'parse_failed' | 'hints_empty' | 'exception:<name>'.
+    """
+    plan_json = _parse_plan_from_completion(completion)
+    if plan_json is None:
+        return "", "parse_failed"
+    try:
+        h = plan_to_hints(plan_json) or ""
+        if not h:
+            return "", "hints_empty"
+        return h, None
+    except Exception as e:
+        return "", f"exception:{type(e).__name__}"
 
 
 def _three_signal_reward(
@@ -211,14 +326,31 @@ def make_reward_fn(
                 continue
             sql = str(sql).strip()
             if completion_format == "plan":
-                plan_json = _parse_plan_from_completion(completion)
-                hints = _plan_json_to_hints(plan_json)
+                hints, plan_issue = _hints_from_plan_completion(completion)
                 if not hints:
-                    print(f"[GRPO Reward] idx={i}: Failed to parse plan from completion (first 200 chars: {completion[:200]})", flush=True)
+                    logged = _completion_for_reward_log(completion)
+                    if plan_issue == "parse_failed":
+                        print(
+                            f"[GRPO Reward] idx={i}: plan JSON not parsed (invalid JSON and/or extra text after JSON; "
+                            f"or truncation mid-JSON — try --max_completion_length).\n"
+                            f"[GRPO Reward] idx={i}: completion ({len(completion)} chars):\n{logged}",
+                            flush=True,
+                        )
+                    else:
+                        print(
+                            f"[GRPO Reward] idx={i}: plan parsed but no hints ({plan_issue}).\n"
+                            f"[GRPO Reward] idx={i}: completion ({len(completion)} chars):\n{logged}",
+                            flush=True,
+                        )
             else:
                 hints = _parse_hints_from_completion(completion)
                 if not hints:
-                    print(f"[GRPO Reward] idx={i}: No hints found in completion (first 200 chars: {completion[:200]})", flush=True)
+                    logged = _completion_for_reward_log(completion)
+                    print(
+                        f"[GRPO Reward] idx={i}: no /*+ ... */ pg_hint_plan block parsed.\n"
+                        f"[GRPO Reward] idx={i}: completion ({len(completion)} chars):\n{logged}",
+                        flush=True,
+                    )
 
             result = run_query_with_metrics(sql, hints=hints or None, db_config=db_config, timeout_s=30.0)
             if not result.get("success"):
@@ -261,12 +393,20 @@ def make_reward_fn(
 
 # Prompt template matching abharadwaj123/llama3-sql2plan (plan JSON output)
 PROMPT_TEMPLATE_PLAN = (
-    "Generate the PostgreSQL execution plan in JSON format for the SQL query.\n\n"
+    "Generate the PostgreSQL execution plan in JSON format for the SQL query.\n"
+    "Output exactly one JSON value: EXPLAIN (FORMAT JSON) shape, e.g. "
+    '[{{"Plan": {{...}}}}]. Use double quotes only. No markdown fences.\n'
+    "Stop immediately after the closing `]` of that JSON array. Do not add statistics, "
+    "second plans, bullet lists, HTML, or any text after the JSON.\n\n"
     "[QUERY]\n{sql}\n\n[PLAN]\n"
 )
 PROMPT_TEMPLATE_HINTS = (
-    "Given the following SQL query, generate optimal pg_hint_plan hints to minimize execution time, CPU usage, and memory. "
-    "Output only the hint comment, e.g. /*+ HashJoin(a b) SeqScan(t) */\n\nSQL:\n{sql}\n\nHints:"
+    "Tune this PostgreSQL query using pg_hint_plan. Output a single hint block only.\n"
+    "Format: /*+ Leading(...) HashJoin(...) SeqScan(...) */ (or NestLoop, MergeJoin, IndexScan, ...) using aliases from the query.\n"
+    "Valid examples: Leading(p u), HashJoin(p u), NestLoop(p u), SeqScan(p), IndexScan(p idx), "
+    "BitmapScan(p), MergeJoin(a b). Pick a small set of hints; do not paste EXPLAIN JSON.\n"
+    "No text before or after the comment. No markdown.\n\n"
+    "[QUERY]\n{sql}\n\n[OUTPUT]\n"
 )
 
 
@@ -302,7 +442,8 @@ class GRPOFineTuneConfig:
     MODEL_NAME = "microsoft/Phi-3-mini-4k-instruct"
     SFT_CHECKPOINT = "abharadwaj123/llama3-sql2plan"  # SFT LoRA on Llama-3.2-3B
     BASE_MODEL = "meta-llama/Llama-3.2-3B"  # Required when SFT checkpoint is PEFT adapters only
-    COMPLETION_FORMAT = "plan"  # "plan" = output execution plan JSON (then convert to hints); "hints" = output /*+ ... */
+    # "hints" = model outputs /*+ ... */ (reward runs query with hints). "plan" = EXPLAIN JSON then plan_to_hints.
+    COMPLETION_FORMAT = "hints"
     USE_4BIT = False  # Set True for M1 16GB / low VRAM (loads base in 4-bit)
 
     OUTPUT_DIR = "./rl_grpo_output"
@@ -311,7 +452,8 @@ class GRPOFineTuneConfig:
     PER_DEVICE_BATCH_SIZE = 2
     NUM_GENERATIONS = 4
     MAX_PROMPT_LENGTH = 2048
-    MAX_COMPLETION_LENGTH = 1024  # Plan JSON can be long; use 256 for hints-only
+    # Plan JSON is often long; hints mode uses a smaller default in main(). Use --max_completion_length to override.
+    MAX_COMPLETION_LENGTH = 8192
     LEARNING_RATE = 1e-5
     GRADIENT_ACCUMULATION_STEPS = 4
 
@@ -323,6 +465,8 @@ class GRPOFineTuneConfig:
     SCALE_CPU_S = 0.5
     SCALE_MEMORY_KB = 50_000.0
     REWARD_ON_ERROR = 0.0
+    # Slightly >1.0 reduces runaway repetition / fake “stats” blocks in long plan JSON.
+    REPETITION_PENALTY_PLAN = 1.08
 
 
 # ---------- Main ----------
@@ -342,9 +486,19 @@ def main():
     parser.add_argument("--weight_memory", type=float, help="Reward weight for inverse memory")
     parser.add_argument("--base_model", type=str, help="Base model for PEFT checkpoint (e.g. meta-llama/Llama-3.2-3B)")
     parser.add_argument("--completion_format", choices=("plan", "hints"), help="plan = output plan JSON; hints = output /*+ ... */")
-    parser.add_argument("--max_completion_length", type=int, help="Max tokens per completion (default: 128 for hints, 1024 for plan)")
+    parser.add_argument(
+        "--max_completion_length",
+        type=int,
+        help="Max new tokens per completion (default: 384 for hints, 8192 for plan)",
+    )
     parser.add_argument("--max_steps", type=int, help="Max training steps (required for tiny datasets; default -1 = use epochs)")
     parser.add_argument("--use_4bit", action="store_true", help="Load base in 4-bit for M1/low VRAM (16GB)")
+    parser.add_argument(
+        "--repetition_penalty",
+        type=float,
+        default=None,
+        help="Generation repetition_penalty (default: 1.08 for plan, 1.0 for hints)",
+    )
     args = parser.parse_args()
 
     config = GRPOFineTuneConfig()
@@ -383,9 +537,18 @@ def main():
     if args.max_completion_length is not None:
         config.MAX_COMPLETION_LENGTH = args.max_completion_length
     elif config.COMPLETION_FORMAT == "hints":
-        config.MAX_COMPLETION_LENGTH = 128  # Hints are short; keep generation fast
+        # Multi-join queries need more than 128 tokens for a full Leading(...) + join/scan hints.
+        config.MAX_COMPLETION_LENGTH = 384
+    # plan format: keep class default (8192) unless user passed --max_completion_length above
     if args.max_steps is not None:
         config.MAX_STEPS = args.max_steps
+
+    if args.repetition_penalty is not None:
+        repetition_penalty = args.repetition_penalty
+    elif config.COMPLETION_FORMAT == "plan":
+        repetition_penalty = float(getattr(config, "REPETITION_PENALTY_PLAN", 1.08))
+    else:
+        repetition_penalty = 1.0
 
     model_name = config.SFT_CHECKPOINT or config.MODEL_NAME
     print(f"[GRPO] Loading tokenizer from {model_name}...", flush=True)
@@ -478,7 +641,11 @@ def main():
         # Avoid multiprocessing in reward (subprocess can't pickle local targets in some envs)
         os.environ["SQLSTORM_QUERY_IN_PROCESS"] = "1"
 
-    print(f"[GRPO] Config: num_generations={num_gen}, max_completion_length={config.MAX_COMPLETION_LENGTH}, batch_size={config.PER_DEVICE_BATCH_SIZE}, max_steps={max_steps}", flush=True)
+    print(
+        f"[GRPO] Config: num_generations={num_gen}, max_completion_length={config.MAX_COMPLETION_LENGTH}, "
+        f"batch_size={config.PER_DEVICE_BATCH_SIZE}, max_steps={max_steps}, repetition_penalty={repetition_penalty}",
+        flush=True,
+    )
 
     training_args = GRPOConfig(
         output_dir=config.OUTPUT_DIR,
@@ -489,6 +656,7 @@ def main():
         learning_rate=config.LEARNING_RATE,
         num_generations=num_gen,
         max_completion_length=config.MAX_COMPLETION_LENGTH,
+        repetition_penalty=repetition_penalty,
         remove_unused_columns=False,
         logging_steps=10,
         save_steps=200,
@@ -496,6 +664,7 @@ def main():
         bf16=use_bf16,
         use_cpu=use_cpu,
         gradient_checkpointing=True,
+        save_only_model=True,
     )
 
     print(f"[GRPO] Initializing trainer with {len(dataset)} examples...", flush=True)
