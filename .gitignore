@@ -40,6 +40,9 @@ Thumbs.db
 # Streamlit frontend temp uploads
 temp_uploads/
 
+# Hugging Face model cache (project-local)
+.cache/
+
 .env
 .env
 .env
